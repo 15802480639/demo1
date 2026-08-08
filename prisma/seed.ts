@@ -4,10 +4,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
 import scraped from './scraped-data.json';
 
-const url = process.env.DATABASE_URL as string;
-console.log('seed db url =>', url);
-const adapter = new PrismaPg({ connectionString: url });
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient();
 
 const BRAND_SLUG = 'mkgolf';
 const REVIEW_TEXTS = [
