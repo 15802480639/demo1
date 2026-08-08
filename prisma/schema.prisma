@@ -1,0 +1,220 @@
+// Prisma 数据模型 —— 全功能电商
+// Prisma 7 范式：url 已移出 schema（见 prisma.config.ts），client 用 adapter 连接
+// 生成: npx prisma generate   迁移: npx prisma migrate dev
+// 数据库: PostgreSQL（海外部署标准，本地可用 Supabase / Neon / 本机 PG）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------- 用户与地址 ----------------
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash String?
+  role         String    @default("customer") // customer | admin
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  addresses    Address[]
+  orders       Order[]
+  reviews      Review[]
+  wishlist     Wishlist[]
+  cart         Cart?
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String? // 收件人姓名
+  line1      String
+  line2      String?
+  city       String
+  state      String?
+  country    String
+  postalCode String
+  phone      String?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  orders     Order[]
+}
+
+// ---------------- 商品 / 分类 / 品牌 ----------------
+model Category {
+  id        String     @id @default(cuid())
+  slug      String     @unique
+  name      String
+  nameZh    String? // 多语言预留
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  products  Product[]
+  imageUrl  String?
+  sortOrder Int        @default(0)
+  createdAt DateTime   @default(now())
+}
+
+model Brand {
+  id       String    @id @default(cuid())
+  slug     String    @unique
+  name     String
+  logoUrl  String?
+  products Product[]
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  slug          String    @unique
+  name          String
+  description   String?
+  code          String? // 货号 / style code（如 GF410），列表卡小字展示
+  gender        String? // men | women | unisex
+  brandId       String?
+  brand         Brand?    @relation(fields: [brandId], references: [id])
+  categoryId    String
+  category      Category  @relation(fields: [categoryId], references: [id])
+  price         Int // 基准价（韩元 ₩，整数）
+  currency      String    @default("KRW")
+  compareAtPrice Int?
+  images        String    @default("[]") // JSON 字符串数组
+  tags          String    @default("[]") // JSON 字符串数组：new | sale | overseas
+  status        String    @default("draft") // draft | active | archived
+  rating        Float     @default(0)
+  reviewCount   Int       @default(0)
+  featured      Boolean   @default(false)
+  skus          Sku[]
+  reviews       Review[]
+  wishlist      Wishlist[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([featured])
+  @@index([gender])
+}
+
+model Sku {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  skuCode   String   @unique
+  options   String? // JSON 字符串：{ "Color": "Red", "Size": "M" }
+  price     Int?
+  stock     Int      @default(0)
+  weight    Float?
+  createdAt DateTime @default(now())
+}
+
+// ---------------- 购物车 ----------------
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String @id @default(cuid())
+  cartId    String
+  cart      Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  skuId     String?
+  quantity  Int    @default(1)
+
+  @@unique([cartId, productId, skuId])
+}
+
+// ---------------- 订单 ----------------
+model Order {
+  id         String      @id @default(cuid())
+  orderNo    String      @unique
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  status     String      @default("pending") // pending|paid|fulfilled|shipped|completed|cancelled|refunded
+  items      OrderItem[]
+  subtotal   Int
+  discount   Int        @default(0)
+  shippingFee Int       @default(0)
+  tax        Int        @default(0)
+  total      Int
+  currency   String      @default("KRW")
+  couponCode String?
+  trackingNo String?
+  carrier    String?
+  addressId  String?
+  address    Address?   @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  shipmentId String?
+  paymentId  String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  skuId     String?
+  name      String
+  price     Int
+  quantity  Int
+  imageUrl  String?
+}
+
+// ---------------- 促销 / 评价 / 物流 ----------------
+model Coupon {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  code       String    @unique
+  type       String // percent | fixed
+  value      Int
+  minSpend   Int      @default(0)
+  startsAt   DateTime?
+  expiresAt  DateTime?
+  usageLimit Int?
+  usedCount  Int       @default(0)
+  active     Boolean   @default(true)
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  rating    Int // 1-5
+  title     String?
+  content   String?
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+model Shipment {
+  id         String   @id @default(cuid())
+  orderId    String   @unique
+  carrier    String?
+  trackingNo String?
+  status     String   @default("preparing") // preparing|shipped|delivered
+  shippedAt  DateTime?
+  createdAt  DateTime @default(now())
+}
+
+// ---------------- 收藏 ----------------
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
