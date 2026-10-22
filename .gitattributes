@@ -1,0 +1,36 @@
+# ============================================================
+#  行尾规范 —— 防止 Windows 开发机的 CRLF 破坏 Linux 部署脚本
+#  背景：deploy-linux.sh 若被转成 CRLF，在 Linux 上会报
+#        `bad interpreter: /bin/bash^M` 直接执行失败
+# ============================================================
+
+# 默认：入库时统一为 LF，检出时按平台自动转换
+* text=auto eol=lf
+
+# Shell / 配置文件：永远 LF，不做平台转换
+*.sh text eol=lf
+*.bash text eol=lf
+deploy-nginx.conf text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.prisma text eol=lf
+*.sql text eol=lf
+
+# Windows 专用脚本：允许 CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# 二进制：不做任何转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
