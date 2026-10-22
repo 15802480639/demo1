@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, getSession } from '@/lib/auth';
+import { requireAdmin, getSession, HttpError } from '@/lib/auth';
 
 /**
  * Kakao 咨询记录 API
@@ -79,28 +79,55 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/**
+ * requireAdmin() 抛的 HttpError 必须在这里转成对应状态码。
+ * 不接的话Next.js 会把任何 throw 都兜成 **500**，
+ * 未登录访问后台接口看着像"服务器炸了"，实际只是没登录 —— 极难排查。
+ */
+function authFail(e: unknown): NextResponse | null {
+  if (e instanceof HttpError) {
+    return NextResponse.json({ error: e.message }, { status: e.status });
+  }
+  return null;
+}
+
 /** 后台列表：支持 status 筛选与分页 */
 export async function GET(req: NextRequest) {
-  await requireAdmin();
-  const sp = req.nextUrl.searchParams;
-  const status = sp.get('status');
-  const limit = Math.min(Number(sp.get('limit')) || 100, 500);
+  let rows, counts;
+  try {
+    await requireAdmin();
+    const sp = req.nextUrl.searchParams;
+    const status = sp.get('status');
+    const limit = Math.min(Number(sp.get('limit')) || 100, 500);
 
-  const rows = await prisma.consultation.findMany({
-    where: status && status !== 'all' ? { status } : undefined,
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-  });
-  const counts = await prisma.consultation.groupBy({
-    by: ['status'],
-    _count: { _all: true },
-  });
+    rows = await prisma.consultation.findMany({
+      where: status && status !== 'all' ? { status } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    counts = await prisma.consultation.groupBy({
+      by: ['status'],
+      _count: { _all: true },
+    });
+  } catch (e) {
+    const fail = authFail(e);
+    if (fail) return fail;
+    console.error('[consultation] list failed:', e);
+    return NextResponse.json({ error: 'SERVER' }, { status: 500 });
+  }
   return NextResponse.json({ rows, counts });
 }
 
 /** 后台改状态 / 备注 */
 export async function PATCH(req: NextRequest) {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (e) {
+    const fail = authFail(e);
+    if (fail) return fail;
+    throw e;
+  }
+
   const b = await req.json();
   const id = clip(b.id, 64);
   const status = clip(b.status, 20);
