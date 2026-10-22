@@ -171,6 +171,14 @@ log "4/8 拉取代码 → ${APP_DIR}"
 mkdir -p "$APP_DIR"
 cd "$APP_DIR"
 
+# ⚠️ 必须显式声明目录可信。
+# 本脚本以 root 运行，但第 8 步会把整个 APP_DIR（含 .git）chown 给 webshopp，
+# 于是 root 再操作该仓库时 git 判定为 "dubious ownership" 并拒绝一切操作。
+# 后果极其隐蔽：git 报错后旧代码继续构建，日志却显示"已更新成功"，
+# 表现为新功能"部署了却没生效"、数据库迁移静默不执行。
+git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+git config --global --add safe.directory '*' 2>/dev/null || true
+
 # GitHub 直连在部分网络下很慢，允许用加速通道（GH_PROXY=https://ghfast.top）
 GIT_URL="$REPO_URL"
 if [[ -n "${GH_PROXY:-}" ]]; then
@@ -179,11 +187,13 @@ if [[ -n "${GH_PROXY:-}" ]]; then
 fi
 
 if [[ -d .git ]]; then
-  git fetch --all --tags && git reset --hard "origin/${BRANCH}"
-  ok "已更新到 origin/${BRANCH}"
+  git fetch --all --tags || die "git fetch 失败（检查服务器到 GitHub 的网络，或设置 GH_PROXY）"
+  git reset --hard "origin/${BRANCH}" || die "git reset 失败"
+  # 打印真实 commit —— 只打印"已更新"这种自述无法验证是否真的拉到了
+  ok "已更新到 $(git rev-parse --short HEAD)（origin/${BRANCH}）"
 else
-  git clone --depth 1 -b "$BRANCH" "$GIT_URL" .
-  ok "首次克隆完成"
+  git clone --depth 1 -b "$BRANCH" "$GIT_URL" . || die "git clone 失败"
+  ok "首次克隆完成：$(git rev-parse --short HEAD)"
 fi
 
 # ⚠️ 校验拉到的确实是最新代码（防止拉错分支导致跑旧版）
