@@ -30,7 +30,15 @@ ok()   { echo -e "  \033[0;32m✓ $*\033[0m"; }
 warn() { echo -e "  \033[0;33m! $*\033[0m"; }
 die()  { echo -e "\n\033[0;31m✗ $*\033[0m"; exit 1; }
 
-[[ $EUID -ne 0 ]] && die "请用 root 运行：sudo bash deploy-linux.sh"
+# 支持非 root 登录（阿里云默认 ecs-user 等）：有免密 sudo 时自动提权重跑
+if [[ $EUID -ne 0 ]]; then
+  if sudo -n true 2>/dev/null; then
+    log "当前用户 $(whoami) 非 root，自动提权重跑部署"
+    exec sudo -E bash "$0" "$@"
+  else
+    die "请用 sudo 运行：sudo bash deploy-linux.sh"
+  fi
+fi
 
 # ---------- 1. 系统依赖 ----------
 log "1/8 安装系统依赖"
@@ -40,6 +48,28 @@ else
   dnf install -y -q curl git gcc-c++ make
 fi
 ok "系统依赖就绪"
+
+# ---------- 1b. 运行用户（PM2 与文件属主；原脚本漏建会导致开机自启失效） ----------
+if ! id "$NODE_USER" >/dev/null 2>&1; then
+  useradd -m -s /bin/bash "$NODE_USER"
+  ok "已创建运行用户 $NODE_USER"
+fi
+
+# ---------- 1c. 内存保障 ----------
+# Next 16 构建峰值约 1.5GB；物理内存不足 3.5GB 时补 swap，否则被 OOM Killer 杀掉
+MEM_TOTAL_KB="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
+MEM_TOTAL_MB=$((MEM_TOTAL_KB / 1024))
+log "物理内存：${MEM_TOTAL_MB}MB"
+if [[ $MEM_TOTAL_MB -lt 3500 ]] && ! swapon --show 2>/dev/null | grep -q '/swapfile'; then
+  log "内存不足 3.5GB，创建 4GB swap（仅构建期兜底）"
+  fallocate -l 4G /swapfile 2>/dev/null \
+    || dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none
+  chmod 600 /swapfile
+  mkswap /swapfile >/dev/null
+  swapon /swapfile || warn "swap 启用失败（虚拟化环境可能禁用 swap，需手动升配）"
+  grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  free -m | awk '/Swap/ {print "  ✓ Swap 总计 "$2"MB"}'
+fi
 
 # ---------- 2. Node.js 22 ----------
 log "2/8 安装 Node.js ${NODE_MAJOR}"
@@ -203,7 +233,15 @@ ok "迁移完成（未重置数据）"
 
 # ---------- 8. 构建 + 守护 ----------
 log "8/8 构建并启动"
-export NODE_OPTIONS="--max-old-space-size=1536"
+# Node heap 上限按物理内存动态计算：留 1GB 给系统与 PostgreSQL，
+# 小内存机器（有 swap 兜底）至少给 1GB heap
+if [[ ${MEM_TOTAL_MB:-0} -gt 2048 ]]; then
+  HEAP_MB=$((MEM_TOTAL_MB - 1024))
+else
+  HEAP_MB=1024
+fi
+export NODE_OPTIONS="--max-old-space-size=${HEAP_MB}"
+log "构建内存策略：物理 ${MEM_TOTAL_MB:-?}MB → Node heap 上限 ${HEAP_MB}MB"
 npm run build
 ok "构建完成"
 
@@ -222,6 +260,8 @@ cp -r node_modules/@prisma .next/standalone/node_modules/ 2>/dev/null || true
 if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g pm2
 fi
+# 产物属主交给运行用户，避免 PM2 以 webshopp 身份启动时权限不足
+chown -R "$NODE_USER:$NODE_USER" "$APP_DIR"
 pm2 delete webshopp 2>/dev/null || true
 pm2 start .next/standalone/server.js --name webshopp \
   --env PORT=3000 --env HOSTNAME=127.0.0.1 --time
