@@ -25,6 +25,39 @@ function specsFromSkus(product: ProductDetail): ProductSpecView[] {
   }));
 }
 
+/**
+ * 默认选中每个规格组里「第一个有库存」的值。
+ *
+ * 必须同步算完、不能只放在 useEffect 里：
+ * soldOut 依赖 matchedSku → matchedSku 依赖 selected。
+ * 若 selected 初始为 {}，服务端渲染时 keys 为空 → matchedSku 恒为 undefined
+ * → stock 落成 0 → 首屏对所有有货商品都渲染「품절 / 售罄」，
+ * 要等客户端 effect 跑完才闪回有货。爬虫只看到 SSR HTML，等于全站被判售罄。
+ */
+function defaultSelection(
+  groups: ProductSpecView[],
+  skus: ProductDetail['skus'],
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const g of groups) {
+    const vals = g.values.map((v) => v.ko).filter(Boolean);
+    if (!vals.length) continue;
+    const inStock = vals.find((v) =>
+      skus.some(
+        (s) =>
+          (s.options ?? {})[g.name] === v &&
+          s.stock > 0 &&
+          // 已选中的其它组也要能对上，否则组合本身无货
+          Object.entries(next).every(
+            ([k, kv]) => k === g.name || (s.options ?? {})[k] === kv,
+          ),
+      ),
+    );
+    next[g.name] = inStock ?? vals[0];
+  }
+  return next;
+}
+
 export function AddToCart({
   product,
   kakaoUrl,
@@ -44,21 +77,28 @@ export function AddToCart({
     [product],
   );
 
-  // 当前选中的规格组合：{ 规格名: 规格值 }
-  const [selected, setSelected] = useState<Record<string, string>>({});
+  // 规格变化时默认选中第一个有库存的值。
+  // 首屏用 defaultSelection 同步算好（SSR 就正确），此 effect 只负责后续切换/换商品时纠偏。
+  const [selected, setSelected] = useState<Record<string, string>>(() =>
+    defaultSelection(groups, product.skus),
+  );
 
-  // 规格变化时默认选中第一个有库存的值
   useEffect(() => {
     setSelected((prev) => {
       const next: Record<string, string> = {};
       for (const g of groups) {
         const vals = g.values.map((v) => v.ko).filter(Boolean);
         if (!vals.length) continue;
-        next[g.name] = prev[g.name] && vals.includes(prev[g.name]) ? prev[g.name] : vals[0];
+        // 用户手选过的值若仍有效就保留，否则回落到有库存的默认值
+        if (prev[g.name] && vals.includes(prev[g.name])) {
+          next[g.name] = prev[g.name];
+          continue;
+        }
+        next[g.name] = defaultSelection([g], product.skus)[g.name] ?? vals[0];
       }
       return next;
     });
-  }, [groups]);
+  }, [groups, product.skus]);
 
   // 规格值显示名：中文页优先中文
   const valueLabel = (g: ProductSpecView, ko: string) =>
