@@ -56,6 +56,20 @@ ok "Node $(node -v)"
 
 # ---------- 3. PostgreSQL ----------
 log "3/8 配置 PostgreSQL"
+# ⚠️ 密码必须在建库之前就确定，否则建库用的密码与 .env 里的对不上
+PG_PASS_FILE="$APP_DIR/.pgpass"
+mkdir -p "$APP_DIR"
+if [[ -z "${PG_PASSWORD:-}" && -f "$PG_PASS_FILE" ]]; then
+  PG_PASSWORD="$(cat "$PG_PASS_FILE")"
+fi
+if [[ -z "${PG_PASSWORD:-}" ]]; then
+  PG_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
+  echo "$PG_PASSWORD" > "$PG_PASS_FILE"
+  chmod 600 "$PG_PASS_FILE"
+  warn "已生成数据库密码并保存到 $PG_PASS_FILE（请备份）"
+fi
+PG_PASS_ENC="$(printf '%s' "$PG_PASSWORD" | od -An -tx1 | tr -d ' \n' | sed 's/../%&/g')"
+
 if ! command -v psql >/dev/null 2>&1; then
   if command -v dnf >/dev/null 2>&1; then
     dnf install -y -q postgresql-server postgresql-contrib
@@ -69,7 +83,7 @@ fi
 
 # 建库建用户（幂等）
 sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${PG_USER}'" | grep -q 1 \
-  || sudo -u postgres psql -c "CREATE USER ${PG_USER} WITH PASSWORD '${PG_PASSWORD:-change-me-now}';"
+  || sudo -u postgres psql -c "CREATE USER ${PG_USER} WITH PASSWORD '${PG_PASSWORD}';"
 sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${PG_DB}'" | grep -q 1 \
   || sudo -u postgres psql -c "CREATE DATABASE ${PG_DB} OWNER ${PG_USER};"
 ok "PostgreSQL $(psql --version | awk '{print $3}') 就绪（库 ${PG_DB}）"
@@ -78,13 +92,28 @@ ok "PostgreSQL $(psql --version | awk '{print $3}') 就绪（库 ${PG_DB}）"
 log "4/8 拉取代码 → ${APP_DIR}"
 mkdir -p "$APP_DIR"
 cd "$APP_DIR"
+
+# GitHub 直连在部分网络下很慢，允许用加速通道（GH_PROXY=https://ghfast.top）
+GIT_URL="$REPO_URL"
+if [[ -n "${GH_PROXY:-}" ]]; then
+  GIT_URL="${GH_PROXY}/${REPO_URL}"
+  warn "使用 GitHub 加速通道：${GH_PROXY}"
+fi
+
 if [[ -d .git ]]; then
   git fetch --all --tags && git reset --hard "origin/${BRANCH}"
   ok "已更新到 origin/${BRANCH}"
 else
-  git clone --depth 1 -b "$BRANCH" "$REPO_URL" .
+  git clone --depth 1 -b "$BRANCH" "$GIT_URL" .
   ok "首次克隆完成"
 fi
+
+# ⚠️ 校验拉到的确实是最新代码（防止拉错分支导致跑旧版）
+if [[ -f package.json ]]; then
+  PKG_VER="$(node -e "console.log(require('./package.json').dependencies.next)" 2>/dev/null || echo '?')"
+  ok "Next.js 版本：${PKG_VER}"
+fi
+[[ -f deploy-linux.sh ]] || warn "⚠️ 拉到的代码里没有 deploy-linux.sh，可能拉错分支了"
 
 # ---------- 5. 依赖 ----------
 log "5/8 安装依赖"
@@ -95,9 +124,23 @@ ok "依赖就绪"
 
 # ---------- 6. 环境变量 ----------
 log "6/8 配置环境变量"
+# 数据库密码未指定则自动生成并记到独立文件（.env 里 URL 编码，避免特殊字符炸掉）
+PG_PASS_FILE="$APP_DIR/.pgpass"
+if [[ -z "${PG_PASSWORD:-}" && -f "$PG_PASS_FILE" ]]; then
+  PG_PASSWORD="$(cat "$PG_PASS_FILE")"
+fi
+if [[ -z "${PG_PASSWORD:-}" ]]; then
+  PG_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
+  echo "$PG_PASSWORD" > "$PG_PASS_FILE"
+  chmod 600 "$PG_PASS_FILE"
+  warn "已生成数据库密码并保存到 $PG_PASS_FILE（请备份）"
+fi
+# URL 编码密码中的特殊字符
+PG_PASS_ENC="$(printf '%s' "$PG_PASSWORD" | od -An -tx1 | tr -d ' \n' | sed 's/../%&/g')"
+
 if [[ ! -f .env ]]; then
   cat > .env <<EOF
-DATABASE_URL="postgresql://${PG_USER}:${PG_PASSWORD:-change-me-now}@127.0.0.1:5432/${PG_DB}?schema=public"
+DATABASE_URL="postgresql://${PG_USER}:${PG_PASS_ENC}@127.0.0.1:5432/${PG_DB}?schema=public"
 AUTH_SECRET="${AUTH_SECRET:-$(openssl rand -base64 48)}"
 NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL:-http://$(curl -s --max-time 5 ifconfig.me 2>/dev/null || echo 127.0.0.1)}"
 NODE_ENV="production"
@@ -107,7 +150,10 @@ EOF
 else
   ok ".env 已存在，跳过（不覆盖）"
 fi
-set -a; source .env; set +a
+# 用 grep 逐行取，避免 source 触发 URL 里的特殊字符
+DB_URL="$(grep -E '^DATABASE_URL=' .env | head -1 | sed 's/^DATABASE_URL=//; s/^"//; s/"$//')"
+export DATABASE_URL="$DB_URL"
+export NODE_ENV=production
 
 # ---------- 7. 数据库迁移（生产铁律：只 migrate，绝不 db push） ----------
 log "7/8 执行数据库迁移"
