@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-#  WebShopp (J&D) 生产部署脚本 —— Alibaba Cloud Linux 3 / Ubuntu 22.04+
+#  WebShopp (J&D) 生产部署脚本 —— Alibaba Cloud Linux 3/4 / Ubuntu 22.04+
 #
 #  用法：
 #    sudo bash deploy-linux.sh
@@ -44,14 +44,43 @@ ok "系统依赖就绪"
 # ---------- 2. Node.js 22 ----------
 log "2/8 安装 Node.js ${NODE_MAJOR}"
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -v | sed 's/v\([0-9]*\).*/\1/')" -lt 20 ]]; then
-  curl -fsSL https://rpm.nodesource.com/setup_${NODE_MAJOR}.x | bash - 2>/dev/null \
-    || curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -
+  # 优先走软件源（NodeSource 对 RHEL/CentOS/Rocky/Alma 系识别较好）
+  # ⚠️ 必须加 `|| true`：set -e 下 curl|bash 失败会让整个脚本退出
+  curl -fsSL "https://rpm.nodesource.com/setup_${NODE_MAJOR}.x" | bash - 2>/dev/null \
+    || curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - || true
   if command -v dnf >/dev/null 2>&1; then
-    dnf install -y -q nodejs
+    dnf install -y -q nodejs || true
   else
-    apt-get install -y -qq nodejs
+    apt-get install -y -qq nodejs || true
+  fi
+  # 兜底：源不可用（如 Alibaba Cloud Linux 4 未被 NodeSource 识别）
+  # → 装官方预编译二进制，任何 glibc 2.28+ 的 Linux 均可运行
+  if ! command -v node >/dev/null 2>&1 || [[ "$(node -v | sed 's/v\([0-9]*\).*/\1/')" -lt 20 ]]; then
+    warn "软件源安装 Node 失败，改用官方二进制包"
+    NODE_ARCH="$(uname -m)"
+    case "$NODE_ARCH" in
+      x86_64|amd64) NODE_ARCH="x64" ;;
+      aarch64|arm64) NODE_ARCH="arm64" ;;
+      *) die "不支持的 CPU 架构：${NODE_ARCH}" ;;
+    esac
+    NODE_VER="$(curl -fsSL "https://nodejs.org/dist/latest-v${NODE_MAJOR}.x/" 2>/dev/null \
+      | grep -o "node-v${NODE_MAJOR}\.[0-9]*\.[0-9]*-linux-${NODE_ARCH}\.tar\.xz" \
+      | head -1 | sed "s/^node-//; s/\.tar\.xz$//")"
+    [[ -n "${NODE_VER}" ]] || die "获取 Node 版本号失败（nodejs.org 不可达？）"
+    log "下载 Node ${NODE_VER}（${NODE_ARCH}）"
+    mkdir -p /usr/local/lib/nodejs
+    curl -fsSL "https://nodejs.org/dist/${NODE_VER}/node-${NODE_VER}-linux-${NODE_ARCH}.tar.xz" \
+      -o /tmp/node.tar.xz || die "Node 二进制下载失败"
+    tar -xJf /tmp/node.tar.xz -C /usr/local/lib/nodejs || die "Node 解压失败"
+    for BIN in node npm npx corepack; do
+      SRC="/usr/local/lib/nodejs/node-${NODE_VER}-linux-${NODE_ARCH}/bin/${BIN}"
+      [[ -x "$SRC" ]] && ln -sf "$SRC" "/usr/local/bin/${BIN}"
+    done
+    rm -f /tmp/node.tar.xz
+    hash -r 2>/dev/null || true
   fi
 fi
+command -v node >/dev/null 2>&1 || die "Node 安装失败，请检查服务器网络"
 ok "Node $(node -v)"
 
 # ---------- 3. PostgreSQL ----------
@@ -72,11 +101,22 @@ PG_PASS_ENC="$(printf '%s' "$PG_PASSWORD" | od -An -tx1 | tr -d ' \n' | sed 's/.
 
 if ! command -v psql >/dev/null 2>&1; then
   if command -v dnf >/dev/null 2>&1; then
-    dnf install -y -q postgresql-server postgresql-contrib
-    postgresql-setup --initdb || true
+    dnf install -y -q postgresql-server postgresql-contrib xz
+    # 初始化数据目录：优先 postgresql-setup（RHEL 系），
+    # 阿里云 ALOS4 等系统可能没有该命令 → 回退手动 initdb
+    if ! postgresql-setup --initdb 2>/dev/null; then
+      warn "postgresql-setup 不可用，改用 initdb 手动初始化"
+      PG_DATA="/var/lib/pgsql/data"
+      if [[ ! -f "${PG_DATA}/PG_VERSION" ]]; then
+        mkdir -p "$PG_DATA"
+        chown -R postgres:postgres /var/lib/pgsql
+        sudo -u postgres initdb -D "$PG_DATA" --encoding=UTF8 --locale=C.UTF-8 \
+          || die "PostgreSQL 初始化失败"
+      fi
+    fi
     systemctl enable --now postgresql
   else
-    apt-get install -y -qq postgresql postgresql-contrib
+    apt-get install -y -qq postgresql postgresql-contrib xz-utils
     systemctl enable --now postgresql
   fi
 fi
