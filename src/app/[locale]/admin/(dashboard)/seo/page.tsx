@@ -296,6 +296,27 @@ export default function AdminSeoPage() {
         </Section>
 
         <Section
+          title="Kakao 咨询链接（购买通道）"
+          hint="客户在 Kakao 平台创建频道后，把聊天页地址粘到这里，形如 https://pf.kakao.com/_AbCdEf/chat 。填了之后韩语商品页的主按钮会从「加入购物车」变成「Kakao 상담」，点它会先在本站留一条咨询记录（商品名/规格/价格/语言），再跳转 Kakao。留空 = 保持原购物车按钮不变。"
+        >
+          <div>
+            <label className={label}>Kakao 频道聊天链接</label>
+            <input
+              className={input}
+              value={form.kakao_consult_url ?? ''}
+              onChange={(e) => set('kakao_consult_url', e.target.value)}
+              placeholder="https://pf.kakao.com/_AbCdEf/chat"
+            />
+            <p className="mt-1 text-xs text-muted">
+              当前状态：
+              {/^https?:\/\//i.test((form.kakao_consult_url ?? '').trim())
+                ? '已启用 —— 韩语商品页主按钮为「Kakao 상담」'
+                : '未配置 —— 保持「加入购物车 / 立即购买」'}
+            </p>
+          </div>
+        </Section>
+
+        <Section
           title={t.socialLinks}
           hint="官方账号链接，会输出为 Organization JSON-LD 的 sameAs 字段 —— 这是把品牌与第三方账号绑定的唯一硬证据。⚠️ 只填 http(s) 开头的真实地址，填 '#' 会被自动剔除。至少填 2 个。"
         >
