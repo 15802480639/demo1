@@ -256,7 +256,9 @@ log "8/8 构建并启动"
 if [[ ${MEM_TOTAL_MB:-0} -gt 2048 ]]; then
   HEAP_MB=$((MEM_TOTAL_MB - 1024))
 else
-  HEAP_MB=1024
+  # 小内存机器：留约 390MB 给系统与 PostgreSQL，其余给 V8；
+  # 物理内存不够的部分由 4GB swap 兜底（换页变慢但不会失败）
+  HEAP_MB=1280
 fi
 export NODE_OPTIONS="--max-old-space-size=${HEAP_MB}"
 log "构建内存策略：物理 ${MEM_TOTAL_MB:-?}MB → Node heap 上限 ${HEAP_MB}MB"

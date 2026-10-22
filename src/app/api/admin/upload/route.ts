@@ -47,7 +47,10 @@ export async function POST(req: NextRequest) {
     const name = `${crypto.randomBytes(8).toString('hex')}.${ext}`;
     await fs.mkdir(projectDir, { recursive: true });
     for (const dir of dirs) {
-      await fs.writeFile(path.join(dir, name), buf);
+      // ⚠️ turbopackIgnore：上传目录是运行时动态路径。
+      // 若参与静态分析，Next 16 会把整个项目（含 public 全部源文件）纳入 tracing，
+      // 构建内存与产物体积暴涨 —— 1.7G 内存的生产机直接构建失败。
+      await fs.writeFile(path.join(/*turbopackIgnore: true*/ dir, name), buf);
     }
     urls.push(`/uploads/${name}`);
   }
