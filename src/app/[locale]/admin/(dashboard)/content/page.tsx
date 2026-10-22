@@ -34,6 +34,18 @@ function toBi(v: unknown): BiText {
 
 const emptyBi = (): BiText => ({ ko: '', zh: '' });
 
+/** 固定页面正文：slug 对应前台 /info/<slug>，正文存 SiteSetting 键 info.<slug>.<locale> */
+const INFO_PAGE_DEFS: { slug: string; label: string }[] = [
+  { slug: 'shipping', label: '配送政策（/info/shipping）' },
+  { slug: 'returns', label: '退换货政策（/info/returns）' },
+  { slug: 'contact', label: '联系我们（/info/contact）' },
+  { slug: 'privacy', label: '隐私政策（/info/privacy）' },
+  { slug: 'terms', label: '服务条款（/info/terms）' },
+];
+type InfoPagesState = Record<string, { ko: string; zh: string; en: string }>;
+const emptyInfoPages = (): InfoPagesState =>
+  Object.fromEntries(INFO_PAGE_DEFS.map((d) => [d.slug, { ko: '', zh: '', en: '' }]));
+
 const DEFAULT_FOOTER_COLUMNS: FooterColumnEdit[] = [
   {
     title: emptyBi(),
@@ -81,6 +93,9 @@ export default function AdminContentPage() {
   });
   const [homeSeoSaved, setHomeSeoSaved] = useState(false);
   const [homeSeoSaving, setHomeSeoSaving] = useState(false);
+  const [infoPages, setInfoPages] = useState<InfoPagesState>(emptyInfoPages);
+  const [infoSaved, setInfoSaved] = useState(false);
+  const [infoSaving, setInfoSaving] = useState(false);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<EventItem | null>(null);
@@ -89,9 +104,10 @@ export default function AdminContentPage() {
 
   useEffect(() => {
     (async () => {
-      const [r1, r2] = await Promise.all([
+      const [r1, r2, r3] = await Promise.all([
         fetch('/api/site-content'),
         fetch('/api/admin/events'),
+        fetch('/api/admin/settings'),
       ]);
       if (r1.ok) {
         const d = await r1.json();
@@ -144,6 +160,21 @@ export default function AdminContentPage() {
         const d = await r2.json();
         setEvents(d.events ?? []);
       }
+      if (r3.ok) {
+        const d = await r3.json();
+        const s = (d.settings ?? {}) as Record<string, string>;
+        setInfoPages((prev) => {
+          const next: InfoPagesState = { ...prev };
+          for (const def of INFO_PAGE_DEFS) {
+            next[def.slug] = {
+              ko: s[`info.${def.slug}.ko`] ?? '',
+              zh: s[`info.${def.slug}.zh`] ?? '',
+              en: s[`info.${def.slug}.en`] ?? '',
+            };
+          }
+          return next;
+        });
+      }
       setLoading(false);
     })();
   }, []);
@@ -174,6 +205,27 @@ export default function AdminContentPage() {
     setHomeSeoSaving(false);
     setHomeSeoSaved(res.ok);
     setTimeout(() => setHomeSeoSaved(false), 3000);
+  }
+
+  /** 保存固定页面正文（隐私政策 / 服务条款等，ko/zh/en × 5 页 = 15 键） */
+  async function saveInfoPages() {
+    setInfoSaving(true);
+    setInfoSaved(false);
+    const settings: Record<string, string> = {};
+    for (const def of INFO_PAGE_DEFS) {
+      const v = infoPages[def.slug] ?? { ko: '', zh: '', en: '' };
+      settings[`info.${def.slug}.ko`] = v.ko;
+      settings[`info.${def.slug}.zh`] = v.zh;
+      settings[`info.${def.slug}.en`] = v.en;
+    }
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings }),
+    });
+    setInfoSaving(false);
+    setInfoSaved(res.ok);
+    setTimeout(() => setInfoSaved(false), 3000);
   }
 
   async function saveFooter() {
@@ -265,6 +317,53 @@ export default function AdminContentPage() {
             {homeSeoSaving ? '保存中…' : '保存介绍文案'}
           </button>
           {homeSeoSaved && <span className="text-xs text-emerald-600">✓ 已保存</span>}
+        </div>
+      </section>
+
+      {/* 固定页面正文（隐私政策 / 服务条款等） */}
+      <section className="border border-line bg-surface p-5 space-y-5 max-w-3xl">
+        <div>
+          <h2 className="font-display text-xl text-ink">页面正文（条款与政策）</h2>
+          <p className="text-xs text-muted mt-1">
+            页脚「客户服务」「条款与政策」点进去的页面内容都在这里填。
+            每个页面<b>分韩文 / 中文 / 英文三套</b>，<b>空行即分段</b>；
+            哪套不填，前台就显示默认占位文案。保存后前台刷新即生效。
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {INFO_PAGE_DEFS.map((def) => {
+            const v = infoPages[def.slug] ?? { ko: '', zh: '', en: '' };
+            const set = (loc: 'ko' | 'zh' | 'en', val: string) =>
+              setInfoPages((s) => ({ ...s, [def.slug]: { ...v, [loc]: val } }));
+            const name = def.label.split('（')[0];
+            const langLabel = (loc: 'ko' | 'zh' | 'en') =>
+              loc === 'ko' ? '韩文' : loc === 'zh' ? '中文' : '英文';
+            return (
+              <div key={def.slug} className="border border-line p-4 space-y-2">
+                <div className="text-sm font-medium text-ink">{def.label}</div>
+                {(['ko', 'zh', 'en'] as const).map((loc) => (
+                  <div key={loc}>
+                    <span className="text-[10px] text-muted block mb-0.5">{langLabel(loc)}</span>
+                    <textarea
+                      className="w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+                      rows={8}
+                      value={v[loc]}
+                      onChange={(e) => set(loc, e.target.value)}
+                      placeholder={`${name} · ${langLabel(loc)}正文（留空显示默认）`}
+                    />
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button onClick={saveInfoPages} disabled={infoSaving} className="btn-gold">
+            {infoSaving ? '保存中…' : '保存页面正文'}
+          </button>
+          {infoSaved && <span className="text-xs text-emerald-600">✓ 已保存</span>}
         </div>
       </section>
 

@@ -22,7 +22,9 @@ export async function PUT(req: NextRequest) {
   const saved: string[] = [];
   for (const key of keys) {
     if (!/^[a-z0-9_.-]{1,64}$/i.test(key)) continue;
-    const value = String(patch[key] ?? '').slice(0, 8000);
+    // info.*（隐私政策/服务条款等页面正文）放开到 10 万字，法务长文也能存；其余键维持 8000
+    const maxLen = key.startsWith('info.') ? 100000 : 8000;
+    const value = String(patch[key] ?? '').slice(0, maxLen);
     await prisma.siteSetting.upsert({
       where: { key },
       create: { key, value },
