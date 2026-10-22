@@ -8,6 +8,7 @@ import { siteConfig } from '@/lib/site';
 import { buildMetadata, faqJsonLd, breadcrumbJsonLd, clampDesc, productJsonLd } from '@/lib/seo';
 import { getFaqs, buildAnswerBlock } from '@/lib/geo';
 import { urlProduct } from '@/lib/urls';
+import { getKakaoUrl } from '@/lib/kakao';
 import { JsonLd } from '@/components/seo/json-ld';
 import { ProductCard } from '@/components/product/product-card';
 import { AddToCart } from '@/components/product/add-to-cart';
@@ -164,7 +165,7 @@ export default async function ProductDetailPage({
 
           <div className="luxe-rule my-8" />
 
-          <AddToCart product={product} />
+          <AddToCart product={product} kakaoUrl={await getKakaoUrl()} />
 
           <div className="mt-4">
             <WishlistButton slug={product.slug} className="inline-flex items-center gap-2 text-sm" />

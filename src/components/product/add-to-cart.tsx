@@ -25,7 +25,15 @@ function specsFromSkus(product: ProductDetail): ProductSpecView[] {
   }));
 }
 
-export function AddToCart({ product }: { product: ProductDetail }) {
+export function AddToCart({
+  product,
+  kakaoUrl,
+}: {
+  product: ProductDetail;
+  /** 由服务端读 getKakaoUrl() 后传入 —— 服务端渲染阶段就决定按钮形态，
+   *  避免先渲染「立即购买」再闪成「Kakao 咨询」。空串 = 未配置，不显示 Kakao 入口。 */
+  kakaoUrl: string;
+}) {
   const { dict, locale } = useLocale();
   const router = useRouter();
   const add = useCart((s) => s.add);
@@ -113,6 +121,34 @@ export function AddToCart({ product }: { product: ProductDetail }) {
     router.push(`/${locale}/checkout`);
   };
 
+  // ---- Kakao 咨询通道 ----
+  // 纯 <a href> 跳 Kakao 不会带任何商品信息，客服只知"有人来消息"、
+  // 不知对方问的什么。所以先由本站落一条咨询快照，再新窗口打开 Kakao。
+  // 记录失败绝不能阻断跳转 —— 用户联系不上客服比少一条记录严重得多。
+  const showKakao = Boolean(kakaoUrl);
+  const isKo = locale === 'ko';
+
+  const handleKakao = async () => {
+    if (!kakaoUrl) return;
+    try {
+      await fetch('/api/consultation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productSlug: product.slug,
+          productName: productName(product, locale),
+          skuLabel: variantLabel,
+          price: unitPrice,
+          locale,
+          sourcePage: 'product',
+        }),
+      });
+    } catch {
+      // 忽略：继续跳 Kakao
+    }
+    window.open(kakaoUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="space-y-6">
       {groups.map((g) => {
@@ -173,17 +209,45 @@ export function AddToCart({ product }: { product: ProductDetail }) {
       )}
 
       <div className="flex gap-3">
-        <button onClick={handleAdd} className="btn-gold flex-1" disabled={soldOut}>
-          {soldOut
-            ? dict.common.outOfStock
-            : added
-              ? '✓ ' + dict.common.addToCart
-              : dict.common.addToCart}
-        </button>
-        <button onClick={handleBuyNow} className="btn-outline flex-1" disabled={soldOut}>
-          {dict.common.buyNow}
-        </button>
+        {isKo && showKakao ? (
+          <>
+            {/* 韩国访客：Kakao 为主购买通道，加购降为次要 */}
+            <button onClick={handleKakao} className="btn-gold flex-1" disabled={soldOut}>
+              {soldOut ? dict.common.outOfStock : dict.common.kakaoConsult}
+            </button>
+            <button onClick={handleAdd} className="btn-outline flex-1" disabled={soldOut}>
+              {soldOut
+                ? dict.common.outOfStock
+                : added
+                  ? '✓ ' + dict.common.addToCart
+                  : dict.common.addToCart}
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={handleAdd} className="btn-gold flex-1" disabled={soldOut}>
+              {soldOut
+                ? dict.common.outOfStock
+                : added
+                  ? '✓ ' + dict.common.addToCart
+                  : dict.common.addToCart}
+            </button>
+            <button onClick={handleBuyNow} className="btn-outline flex-1" disabled={soldOut}>
+              {dict.common.buyNow}
+            </button>
+          </>
+        )}
       </div>
+      {/* 中文/英文访客：Kakao 多半打不开（国内实测连接被拒），降级为次要入口 */}
+      {!isKo && showKakao && (
+        <button
+          onClick={handleKakao}
+          className="btn-outline w-full text-xs py-2.5"
+          disabled={soldOut}
+        >
+          {dict.common.kakaoConsultAlt}
+        </button>
+      )}
       {soldOut && (
         <p className="text-xs text-red-600">
           {dict.product.variantSoldOut ?? dict.common.outOfStock}

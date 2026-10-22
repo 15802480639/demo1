@@ -27,6 +27,7 @@ export function AdminShell({
     { href: '/admin/brands', label: t.brands },
     { href: '/admin/products', label: t.products },
     { href: '/admin/orders', label: t.orders },
+    { href: '/admin/consultations', label: 'Kakao 咨询' },
     { href: '/admin/coupons', label: t.coupons },
     { href: '/admin/newsletter', label: '订阅列表' },
     { href: '/admin/customers', label: t.customers },

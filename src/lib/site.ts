@@ -25,7 +25,10 @@ export const siteConfig = {
   // Social
   youtube: 'https://www.youtube.com/@zk2026-6',
   instagram: '#',
-  kakao: 'https://pf.kakao.com/_MfjUn/chat',
+  // ⚠️ Kakao 链接不再硬编码：原值是参考店的 pf.kakao.com，会被写进
+  // organizationJsonLd 的 sameAs（等于告诉搜索引擎「我和他是同一家」）。
+  // 现统一由 getKakaoUrl() 从后台 SiteSetting 读取，未配置则为空。
+  kakao: '',
 
   // Company info (footer)
   company: {

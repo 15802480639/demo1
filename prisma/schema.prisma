@@ -13,19 +13,20 @@ datasource db {
 
 // ---------------- 用户与地址 ----------------
 model User {
-  id           String    @id @default(cuid())
-  username     String?   @unique // 登录账号（注册时必填，老用户为空则用邮箱登录）
-  email        String?   @unique // 选填
-  name         String?
-  passwordHash String?
-  role         String    @default("customer") // customer | admin
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  addresses    Address[]
-  orders       Order[]
-  reviews      Review[]
-  wishlist     Wishlist[]
-  cart         Cart?
+  id            String         @id @default(cuid())
+  username      String?        @unique // 登录账号（注册时必填，老用户为空则用邮箱登录）
+  email         String?        @unique // 选填
+  name          String?
+  passwordHash  String?
+  role          String         @default("customer") // customer | admin
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  addresses     Address[]
+  orders        Order[]
+  reviews       Review[]
+  wishlist      Wishlist[]
+  cart          Cart?
+  consultations Consultation[]
 }
 
 model Address {
@@ -70,33 +71,34 @@ model Brand {
 }
 
 model Product {
-  id            String    @id @default(cuid())
-  slug          String    @unique
-  name          String
-  nameZh        String? // 中文商品名（后台双语录入，zh 前台优先显示）
-  description   String?
-  descriptionZh String? // 中文描述
-  code          String? // 货号 / style code（如 GF410），列表卡小字展示
-  gender        String? // men | women | unisex
-  brandId       String?
-  brand         Brand?    @relation(fields: [brandId], references: [id])
-  categoryId    String
-  category      Category  @relation(fields: [categoryId], references: [id])
-  price         Int // 基准价（韩元 ₩，整数）
-  currency      String    @default("KRW")
+  id             String         @id @default(cuid())
+  slug           String         @unique
+  name           String
+  nameZh         String? // 中文商品名（后台双语录入，zh 前台优先显示）
+  description    String?
+  descriptionZh  String? // 中文描述
+  code           String? // 货号 / style code（如 GF410），列表卡小字展示
+  gender         String? // men | women | unisex
+  brandId        String?
+  brand          Brand?         @relation(fields: [brandId], references: [id])
+  categoryId     String
+  category       Category       @relation(fields: [categoryId], references: [id])
+  price          Int // 基准价（韩元 ₩，整数）
+  currency       String         @default("KRW")
   compareAtPrice Int?
-  images        String    @default("[]") // JSON 字符串数组
-  tags          String    @default("[]") // JSON 字符串数组：new | sale | overseas
-  status        String    @default("draft") // draft | active | archived
-  rating        Float     @default(0)
-  reviewCount   Int       @default(0)
-  featured      Boolean   @default(false)
-  skus          Sku[]
-  specs        ProductSpec[]
-  reviews       Review[]
-  wishlist      Wishlist[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  images         String         @default("[]") // JSON 字符串数组
+  tags           String         @default("[]") // JSON 字符串数组：new | sale | overseas
+  status         String         @default("draft") // draft | active | archived
+  rating         Float          @default(0)
+  reviewCount    Int            @default(0)
+  featured       Boolean        @default(false)
+  skus           Sku[]
+  specs          ProductSpec[]
+  reviews        Review[]
+  wishlist       Wishlist[]
+  consultations  Consultation[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([categoryId])
   @@index([status])
@@ -140,41 +142,41 @@ model Cart {
 }
 
 model CartItem {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   cartId    String
-  cart      Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
   productId String
   skuId     String?
-  quantity  Int    @default(1)
+  quantity  Int     @default(1)
 
   @@unique([cartId, productId, skuId])
 }
 
 // ---------------- 订单 ----------------
 model Order {
-  id         String      @id @default(cuid())
-  orderNo    String      @unique
-  userId     String
-  user       User        @relation(fields: [userId], references: [id])
-  status     String      @default("pending") // pending|paid|fulfilled|shipped|completed|cancelled|refunded
-  items      OrderItem[]
-  subtotal   Int
-  discount   Int        @default(0)
-  shippingFee Int       @default(0)
-  tax        Int        @default(0)
-  total      Int
-  currency   String      @default("KRW")
-  couponCode String?
-  trackingNo String?
-  carrier    String?
-  contacted  Boolean   @default(false) // 后台客服是否已联系该订单客户
+  id          String      @id @default(cuid())
+  orderNo     String      @unique
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  status      String      @default("pending") // pending|paid|fulfilled|shipped|completed|cancelled|refunded
+  items       OrderItem[]
+  subtotal    Int
+  discount    Int         @default(0)
+  shippingFee Int         @default(0)
+  tax         Int         @default(0)
+  total       Int
+  currency    String      @default("KRW")
+  couponCode  String?
+  trackingNo  String?
+  carrier     String?
+  contacted   Boolean     @default(false) // 后台客服是否已联系该订单客户
   contactedAt DateTime?
-  addressId  String?
-  address    Address?   @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  shipmentId String?
-  paymentId  String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  addressId   String?
+  address     Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  shipmentId  String?
+  paymentId   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }
 
 model OrderItem {
@@ -196,8 +198,8 @@ model Coupon {
   code       String    @unique
   type       String // percent | fixed
   value      Int
-  minSpend   Int      @default(0)
-  productIds String   @default("[]") // JSON 数组：适用商品 id；空=全场通用
+  minSpend   Int       @default(0)
+  productIds String    @default("[]") // JSON 数组：适用商品 id；空=全场通用
   startsAt   DateTime?
   expiresAt  DateTime?
   usageLimit Int?
@@ -220,13 +222,13 @@ model Review {
 }
 
 model Shipment {
-  id         String   @id @default(cuid())
-  orderId    String   @unique
+  id         String    @id @default(cuid())
+  orderId    String    @unique
   carrier    String?
   trackingNo String?
-  status     String   @default("preparing") // preparing|shipped|delivered
+  status     String    @default("preparing") // preparing|shipped|delivered
   shippedAt  DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 }
 
 // ---------------- 收藏 ----------------
@@ -307,17 +309,17 @@ model NewsletterSub {
 /// 电子报群发记录（每次群发一条，便于回溯发过什么、成功率多少）。
 /// kind=test 表示只发给了测试邮箱，不计入正式群发。
 model NewsletterCampaign {
-  id        String   @id @default(cuid())
-  subject   String
-  body      String
-  locale    String   @default("ko") // 该邮件主要语种
-  kind      String   @default("broadcast") // broadcast | test
+  id         String   @id @default(cuid())
+  subject    String
+  body       String
+  locale     String   @default("ko") // 该邮件主要语种
+  kind       String   @default("broadcast") // broadcast | test
   recipients Int      @default(0) // 目标人数
-  sent      Int      @default(0) // 成功数
-  failed    Int      @default(0) // 失败数
-  dryRun    Boolean  @default(false) // true = 未配 API key，仅日志模式
-  errorLog  String   @default("") // 失败明细（最多存 10 条）
-  createdAt DateTime @default(now())
+  sent       Int      @default(0) // 成功数
+  failed     Int      @default(0) // 失败数
+  dryRun     Boolean  @default(false) // true = 未配 API key，仅日志模式
+  errorLog   String   @default("") // 失败明细（最多存 10 条）
+  createdAt  DateTime @default(now())
 
   @@index([createdAt])
 }
@@ -365,4 +367,31 @@ model GeoFact {
   @@index([kind, order])
   @@index([status])
   @@index([locale])
+}
+
+/// Kakao 咨询记录：用户点「Kakao 咨询购买」时留档，
+/// 目的是让客服在 Kakao 里收到消息后，能在后台看到对方咨询的是哪个商品/规格/价格。
+/// 说明：纯 `<a href>` 跳 Kakao 属于纯跳转，Kakao 侧不传任何商品信息，
+/// 所以必须在跳转前由本站写一条记录，否则客服无从得知上下文。
+model Consultation {
+  id          String   @id @default(cuid())
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  // 以下为快照字段：商品名/价格/规格日后可能变更，咨询发生时的值需留底
+  productName String
+  productSlug String?
+  skuLabel    String? // 规格摘要，如「색상: 화이트 / 사이즈: M」
+  price       Int // 咨询时的单价（KRW）
+  locale      String   @default("ko") // 访客所在语言页面
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sourcePage  String? // 点击来源页，便于判断是详情页还是购物车
+  status      String   @default("new") // new | contacted | closed
+  note        String? // 客服备注
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([productId])
 }

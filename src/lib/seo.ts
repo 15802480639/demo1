@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { siteConfig } from '@/lib/site';
 import { locales, type Locale } from '@/i18n/config';
 import { getSettings, getGeoFacts } from '@/lib/geo';
+import { getKakaoUrl } from '@/lib/kakao';
 
 /**
  * SEO / GEO 基建层。
@@ -213,12 +214,13 @@ async function getSameAs(): Promise<string[]> {
     s.social_linkedin,
   ];
   // cleanUrls 只认 http(s)，'#' / '—' / 相对路径全被剔除
+  // kakao 走 getKakaoUrl()：后台未配置时返回空串，不会误用别家链接
   return cleanUrls([
     ...bulk,
     ...individual,
     siteConfig.youtube,
     siteConfig.instagram,
-    siteConfig.kakao,
+    await getKakaoUrl(),
   ]);
 }
 
