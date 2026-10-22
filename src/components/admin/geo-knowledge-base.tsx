@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { getDictionary } from '@/i18n/dictionaries';
 import GeoFactEditor from '@/components/admin/geo-fact-editor';
@@ -44,6 +44,7 @@ export default function GeoKnowledgeBase({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const [intro, setIntro] = useState({ en: '', zh: '', ko: '' });
   const [introSaving, setIntroSaving] = useState(false);
@@ -100,6 +101,10 @@ export default function GeoKnowledgeBase({
       status: f.status,
     });
     setErr('');
+    // 表单在列表上方很远的位置，不滚动的话用户点了「编辑」看不到任何变化
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   async function save(e: React.FormEvent) {
@@ -279,11 +284,16 @@ export default function GeoKnowledgeBase({
         <p className="text-sm text-muted mt-1 max-w-3xl">{t.faqHint}</p>
 
         <form
+          ref={formRef}
           onSubmit={save}
-          className="border border-line bg-surface p-6 mt-4 max-w-3xl space-y-4"
+          className={`border p-6 mt-4 max-w-3xl space-y-4 transition-colors ${
+            editing
+              ? 'border-accent bg-accent/5'
+              : 'border-line bg-surface'
+          }`}
         >
           <h3 className="font-semibold text-ink text-sm">
-            {editing ? t.editFaq : t.newFaq}
+            {editing ? `✏️ ${t.editFaq}：${editing.question.slice(0, 30)}${editing.question.length > 30 ? '…' : ''}` : t.newFaq}
           </h3>
 
           <div className="grid gap-4 sm:grid-cols-2">
