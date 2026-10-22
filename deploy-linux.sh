@@ -116,8 +116,8 @@ ok "Node $(node -v)"
 # ---------- 3. PostgreSQL ----------
 log "3/8 配置 PostgreSQL"
 # ⚠️ 密码必须在建库之前就确定，否则建库用的密码与 .env 里的对不上
-PG_PASS_FILE="$APP_DIR/.pgpass"
-mkdir -p "$APP_DIR"
+PG_PASS_FILE="/etc/webshopp/.pgpass"
+mkdir -p /etc/webshopp "$APP_DIR"
 if [[ -z "${PG_PASSWORD:-}" && -f "$PG_PASS_FILE" ]]; then
   PG_PASSWORD="$(cat "$PG_PASS_FILE")"
 fi
@@ -195,7 +195,7 @@ ok "依赖就绪"
 # ---------- 6. 环境变量 ----------
 log "6/8 配置环境变量"
 # 数据库密码未指定则自动生成并记到独立文件（.env 里 URL 编码，避免特殊字符炸掉）
-PG_PASS_FILE="$APP_DIR/.pgpass"
+PG_PASS_FILE="/etc/webshopp/.pgpass"
 if [[ -z "${PG_PASSWORD:-}" && -f "$PG_PASS_FILE" ]]; then
   PG_PASSWORD="$(cat "$PG_PASS_FILE")"
 fi
