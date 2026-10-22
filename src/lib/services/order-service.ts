@@ -133,18 +133,31 @@ export async function createOrder(input: {
       const valid =
         (!c.startsAt || c.startsAt <= now) &&
         (!c.expiresAt || c.expiresAt >= now) &&
-        c.minSpend <= subtotal &&
         (!c.usageLimit || c.usedCount < c.usageLimit);
       if (valid) {
-        discount =
-          c.type === 'percent'
-            ? Math.round((subtotal * c.value) / 100)
-            : Math.min(c.value, subtotal);
-        appliedCoupon = c.code;
-        await prisma.coupon.update({
-          where: { id: c.id },
-          data: { usedCount: { increment: 1 } },
-        });
+        // 适用商品：productIds 为空 = 全场通用；否则只对订单里的适用商品小计打折
+        let applicableSub = subtotal;
+        try {
+          const ids: string[] = JSON.parse(c.productIds || '[]');
+          if (Array.isArray(ids) && ids.length > 0) {
+            applicableSub = orderItems
+              .filter((oi) => ids.includes(oi.productId))
+              .reduce((sum, oi) => sum + oi.price * oi.quantity, 0);
+          }
+        } catch {
+          // 解析失败按全场通用
+        }
+        if (applicableSub > 0 && c.minSpend <= applicableSub) {
+          discount =
+            c.type === 'percent'
+              ? Math.round((applicableSub * c.value) / 100)
+              : Math.min(c.value, applicableSub);
+          appliedCoupon = c.code;
+          await prisma.coupon.update({
+            where: { id: c.id },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
       }
     }
   }
@@ -241,11 +254,16 @@ export async function getOrderByNo(orderNo: string, userId?: string) {
   return o;
 }
 
-export async function getAdminOrders(take = 50) {
+export async function getAdminOrders(take = 200, userId?: string) {
   return prisma.order.findMany({
+    where: userId ? { userId } : undefined,
     orderBy: { createdAt: 'desc' },
     take,
-    include: { items: true, user: true },
+    include: {
+      items: true,
+      user: true,
+      address: true,
+    },
   });
 }
 

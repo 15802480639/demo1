@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLocale } from '@/components/i18n/locale-provider';
+import { getDictionary } from '@/i18n/dictionaries';
 import { formatPrice } from '@/lib/format';
 
 type Coupon = {
@@ -9,6 +11,7 @@ type Coupon = {
   type: string;
   value: number;
   minSpend: number;
+  productIds: string;
   startsAt: string | null;
   expiresAt: string | null;
   usageLimit: number | null;
@@ -16,8 +19,24 @@ type Coupon = {
   active: boolean;
 };
 
+type ProductOpt = { id: string; name: string; nameZh: string | null; code: string | null };
+
+function parseIds(s: string | null | undefined): string[] {
+  if (!s) return [];
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function AdminCouponsPage() {
+  const { locale } = useLocale();
+  const t = getDictionary('zh').admin;
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [products, setProducts] = useState<ProductOpt[]>([]);
+  const [productKw, setProductKw] = useState('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Coupon | null>(null);
   const [form, setForm] = useState({
@@ -25,6 +44,7 @@ export default function AdminCouponsPage() {
     type: 'percent',
     value: '',
     minSpend: '',
+    productIds: [] as string[],
     startsAt: '',
     expiresAt: '',
     usageLimit: '',
@@ -40,11 +60,15 @@ export default function AdminCouponsPage() {
   }
   useEffect(() => {
     load();
+    fetch('/api/admin/products?limit=200')
+      .then((r) => r.json())
+      .then((d) => setProducts(d.items ?? d.products ?? []))
+      .catch(() => {});
   }, []);
 
   function openNew() {
     setEditing(null);
-    setForm({ code: '', type: 'percent', value: '', minSpend: '', startsAt: '', expiresAt: '', usageLimit: '', active: true });
+    setForm({ code: '', type: 'percent', value: '', minSpend: '', productIds: [], startsAt: '', expiresAt: '', usageLimit: '', active: true });
     (document.getElementById('coupon-modal') as HTMLElement)?.classList.remove('hidden');
   }
   function openEdit(c: Coupon) {
@@ -54,6 +78,7 @@ export default function AdminCouponsPage() {
       type: c.type,
       value: String(c.value),
       minSpend: String(c.minSpend),
+      productIds: parseIds(c.productIds),
       startsAt: c.startsAt ? c.startsAt.slice(0, 10) : '',
       expiresAt: c.expiresAt ? c.expiresAt.slice(0, 10) : '',
       usageLimit: c.usageLimit ? String(c.usageLimit) : '',
@@ -71,6 +96,7 @@ export default function AdminCouponsPage() {
     setErr('');
     const payload = {
       ...form,
+      productIds: form.productIds,
       value: Number(form.value),
       minSpend: Number(form.minSpend) || 0,
       usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
@@ -87,7 +113,7 @@ export default function AdminCouponsPage() {
           body: JSON.stringify(payload),
         });
     if (!res.ok) {
-      setErr('Save failed');
+      setErr(t.saveFailed);
       return;
     }
     close();
@@ -95,7 +121,7 @@ export default function AdminCouponsPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete coupon?')) return;
+    if (!confirm(t.deleteConfirm)) return;
     await fetch(`/api/admin/coupons?id=${id}`, { method: 'DELETE' });
     load();
   }
@@ -105,22 +131,25 @@ export default function AdminCouponsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-3xl text-ink">Coupons</h1>
-        <button onClick={openNew} className="btn-gold">+ New</button>
+        <h1 className="font-display text-3xl text-ink">{t.coupons}</h1>
+        <button onClick={openNew} className="btn-gold">+ {t.add}</button>
       </div>
 
       {loading ? (
-        <p className="text-muted">Loading…</p>
+        <p className="text-muted">加载中…</p>
       ) : (
         <div className="border border-line divide-y divide-line">
           {coupons.map((c) => (
             <div key={c.id} className="flex items-center gap-4 p-3 hover:bg-surface-2">
               <span className="font-medium text-ink w-28">{c.code}</span>
               <span className="text-sm w-20">
-                {c.type === 'percent' ? c.value + '%' : formatPrice(c.value, 'ko')}
+                {c.type === 'percent' ? c.value + '%' : formatPrice(c.value, locale)}
               </span>
               <span className="text-xs text-muted w-24">
-                min {c.minSpend ? formatPrice(c.minSpend, 'ko') : '—'}
+                min {c.minSpend ? formatPrice(c.minSpend, locale) : '—'}
+              </span>
+              <span className="text-xs text-muted w-28">
+                {parseIds(c.productIds).length > 0 ? `限 ${parseIds(c.productIds).length} 件商品` : '全场通用'}
               </span>
               <span className="text-xs text-muted w-20">
                 {c.usedCount}/{c.usageLimit ?? '∞'}
@@ -131,64 +160,119 @@ export default function AdminCouponsPage() {
                 {c.active ? 'ON' : 'OFF'}
               </span>
               <button onClick={() => openEdit(c)} className="text-xs px-3 py-1.5 border border-line hover:border-ink">
-                Edit
+                {t.edit}
               </button>
               <button onClick={() => remove(c.id)} className="text-xs px-3 py-1.5 border border-line hover:border-red-500 text-red-600">
-                Del
+                {t.delete}
               </button>
             </div>
           ))}
-          {coupons.length === 0 && <p className="p-5 text-sm text-muted">No coupons</p>}
+          {coupons.length === 0 && <p className="p-5 text-sm text-muted">{t.noCoupons}</p>}
         </div>
       )}
 
       <div id="coupon-modal" className="hidden fixed inset-0 bg-black/40 z-50 flex items-start justify-center overflow-y-auto p-4">
         <form onSubmit={save} className="bg-bg w-full max-w-md my-8 border border-line p-6 space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="font-display text-2xl text-ink">{editing ? 'Edit Coupon' : 'New Coupon'}</h2>
+            <h2 className="font-display text-2xl text-ink">{editing ? t.editCoupon : t.newCoupon}</h2>
             <button type="button" onClick={close} className="text-muted hover:text-ink">✕</button>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">Code *</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.code2} *</label>
               <input className={input} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">Type</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.type}</label>
               <select className={input} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                <option value="percent">Percent %</option>
-                <option value="fixed">Fixed ₩</option>
+                <option value="percent">{t.percent} %</option>
+                <option value="fixed">{t.fixed} ₩</option>
               </select>
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">Value *</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.value} *</label>
               <input type="number" className={input} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} required />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">Min spend</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.minSpend}</label>
               <input type="number" className={input} value={form.minSpend} onChange={(e) => setForm({ ...form, minSpend: e.target.value })} />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">Start</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.start}</label>
               <input type="date" className={input} value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">Expire</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.end}</label>
               <input type="date" className={input} value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} />
             </div>
           </div>
           <div>
-            <label className="text-xs tracking-widest text-muted block mb-1">Usage limit (blank = ∞)</label>
+            <label className="text-xs tracking-widest text-muted block mb-1">{t.usageLimit}</label>
             <input type="number" className={input} value={form.usageLimit} onChange={(e) => setForm({ ...form, usageLimit: e.target.value })} />
+          </div>
+          {/* 适用商品：不勾选 = 全场通用 */}
+          <div className="col-span-2">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs tracking-widest text-muted">适用商品（不勾选 = 全场通用）</label>
+              <span className="text-xs text-muted">
+                已选 {form.productIds.length} 件
+                {form.productIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, productIds: [] }))}
+                    className="ml-2 text-accent hover:underline"
+                  >
+                    清空
+                  </button>
+                )}
+              </span>
+            </div>
+            <input
+              className={input + ' mb-2'}
+              value={productKw}
+              onChange={(e) => setProductKw(e.target.value)}
+              placeholder="搜索商品名 / 货号"
+            />
+            <div className="border border-line max-h-52 overflow-y-auto">
+              {products
+                .filter((p) => {
+                  const k = productKw.trim().toLowerCase();
+                  if (!k) return true;
+                  return (
+                    (p.name ?? '').toLowerCase().includes(k) ||
+                    (p.nameZh ?? '').toLowerCase().includes(k) ||
+                    (p.code ?? '').toLowerCase().includes(k)
+                  );
+                })
+                .map((p) => (
+                  <label key={p.id} className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-surface-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.productIds.includes(p.id)}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          productIds: e.target.checked
+                            ? [...f.productIds, p.id]
+                            : f.productIds.filter((x) => x !== p.id),
+                        }))
+                      }
+                    />
+                    <span className="truncate">{p.nameZh || p.name}</span>
+                    {p.code && <span className="text-xs text-muted shrink-0">{p.code}</span>}
+                  </label>
+                ))}
+              {products.length === 0 && <p className="px-3 py-2 text-xs text-muted">商品加载中…</p>}
+            </div>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
-            Active
+            {t.active}
           </label>
           {err && <p className="text-sm text-red-600">{err}</p>}
           <div className="flex gap-3 pt-2">
-            <button type="submit" className="btn-gold">Save</button>
-            <button type="button" onClick={close} className="btn-outline">Cancel</button>
+            <button type="submit" className="btn-gold">{t.save}</button>
+            <button type="button" onClick={close} className="btn-outline">{t.cancel}</button>
           </div>
         </form>
       </div>

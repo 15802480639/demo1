@@ -18,7 +18,17 @@ export async function PUT(
       price: Number(body.price),
       compareAtPrice: body.compareAtPrice ? Number(body.compareAtPrice) : undefined,
     });
-    return NextResponse.json({ ok: true, product });
+
+    // 商品更新 → 推送该页三语种 URL，让 Bing 系索引及时刷新（静默失败）
+    let indexnow: { ok: boolean; error?: string } | null = null;
+    try {
+      const { pushPaths } = await import('@/lib/indexnow');
+      indexnow = await pushPaths([`/products/${product.slug}`]);
+    } catch (e) {
+      indexnow = { ok: false, error: e instanceof Error ? e.message : 'push failed' };
+    }
+
+    return NextResponse.json({ ok: true, product, indexnow });
   } catch (e) {
     console.error('update product error', e);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

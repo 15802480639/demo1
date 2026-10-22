@@ -26,3 +26,11 @@ export function formatDate(date: Date | string, locale: Locale): string {
     day: 'numeric',
   }).format(d);
 }
+
+/** 商品显示名：中文页优先用后台录的中文名，没录则回落原名 */
+export function productName(
+  p: { name: string; nameZh?: string | null },
+  locale: string,
+): string {
+  return locale === 'zh' && p.nameZh ? p.nameZh : p.name;
+}

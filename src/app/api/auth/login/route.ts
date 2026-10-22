@@ -11,14 +11,21 @@ import {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const email = String(body.email ?? '').toLowerCase().trim();
+    // 账号（username，大小写敏感）或邮箱（不区分大小写）都可以登录
+    const rawAccount = String(body.account ?? body.email ?? '').trim();
     const password = String(body.password ?? '');
 
-    if (!email || !password) {
+    if (!rawAccount || !password) {
       return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    // 先按用户名精确找，找不到再按邮箱找
+    let user = await prisma.user.findUnique({ where: { username: rawAccount } });
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: { email: rawAccount.toLowerCase() },
+      });
+    }
     if (!user || !user.passwordHash) {
       return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
     }
@@ -29,6 +36,7 @@ export async function POST(req: Request) {
 
     const sessionUser: SessionUser = {
       id: user.id,
+      username: user.username,
       name: user.name,
       email: user.email,
       role: user.role,

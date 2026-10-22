@@ -1,15 +1,15 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { PrismaLibSql } from '@prisma/adapter-libsql';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
 import scraped from './scraped-data.json';
 
 const url = process.env.DATABASE_URL as string;
 console.log('seed db url =>', url);
-const adapter = new PrismaLibSql({ url });
+const adapter = new PrismaPg({ connectionString: url });
 const prisma = new PrismaClient({ adapter });
 
-const BRAND_SLUG = 'mkgolf';
+const BRAND_SLUG = 'j-d';
 const REVIEW_TEXTS = [
   '핏도 좋고 소재가 마음에 듭니다.',
   '배송이 빨라요. 선물하기 좋습니다.',
@@ -52,11 +52,11 @@ async function main() {
   }
   console.log(`✓ ${cats.length} categories`);
 
-  // 品牌：保留原有装饰品牌 + MKGOLF（自有品牌）
+  // 品牌：保留原有装饰品牌 + J&D（自有品牌，2026-10-20 更名）
   const brandNames = [
     'TITLEIST', 'PXG', 'GFORE', 'MARK & LONA', 'J.LINDEBERG',
     'MALBON', 'PEARLY GATES', 'ANEW', 'SOUTHCAPE', 'NIKE',
-    'MKGOLF',
+    'J&D',
   ];
   for (const n of brandNames) {
     const slug = n.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -118,7 +118,7 @@ async function main() {
         name: p.name,
         code: p.code || null,
         gender: p.gender,
-        description: `${p.name} — MKGOLF 프리미엄 골프웨어.`,
+        description: `${p.name} — J&D 프리미엄 골프웨어.`,
         price: p.price,
         compareAtPrice,
         images: JSON.stringify(p.images && p.images.length ? p.images : [p.image]),
@@ -144,6 +144,105 @@ async function main() {
     count++;
   }
   console.log(`✓ ${count} products (with SKUs & reviews)`);
+
+  // ---------- SEO / GEO 默认值（只补缺，绝不覆盖已有设置） ----------
+  const SETTING_DEFAULTS: Record<string, string> = {
+    'seo.homeTitle': 'J&D — Premium Golfwear',
+    'seo.homeTitle.ko': 'J&D — 프리미엄 골프웨어 쇼핑몰',
+    'seo.homeTitle.zh': 'J&D — 高端高尔夫服饰商城',
+    'seo.homeDesc':
+      'J&D offers premium golfwear for men and women — outerwear, knitwear, headwear and bags — with worldwide shipping and authentic guarantee.',
+    'seo.keywords': 'J&D, golfwear, golf apparel, premium golfwear, 골프웨어',
+    'llms.intro':
+      'J&D (제이앤디) is a premium golfwear brand offering men’s and women’s golf apparel, outerwear, knitwear, headwear and bags.',
+    'llms.intro.ko':
+      '제이앤디(J&D)는 남녀 골프웨어, 아우터, 니트, 모자, 가방을 선보이는 프리미엄 골프웨어 브랜드입니다.',
+    'llms.intro.zh':
+      'J&D（제이앤디）是主打男女高尔夫服饰、外套、针织、帽子与包袋的高端高尔夫服饰品牌。',
+    'seo.ogImage': '/brand/jnd-og.png',
+    'seo.gaId': '',
+    'seo.googleVerify': '',
+    'seo.bingVerify': '',
+    'robots.custom': '',
+    'indexnow.key': '',
+  };
+  for (const [key, value] of Object.entries(SETTING_DEFAULTS)) {
+    // update 留空 = 已存在的设置保持不动
+    await prisma.siteSetting.upsert({
+      where: { key },
+      create: { key, value },
+      update: {},
+    });
+  }
+  console.log(`✓ ${Object.keys(SETTING_DEFAULTS).length} site settings (only-if-missing)`);
+
+  const FAQ_DEFAULTS = [
+    {
+      locale: 'ko',
+      q: '제이앤디는 어떤 브랜드인가요?',
+      a: '제이앤디(J&D)는 남녀 골프웨어, 아우터, 니트, 모자, 가방을 선보이는 프리미엄 골프웨어 브랜드입니다.',
+    },
+    {
+      locale: 'ko',
+      q: '해외 배송이 가능한가요?',
+      a: '네. 국내는 물론 해외 배송을 지원하며, 주문 후 영업일 기준 1~2일 내 출고됩니다.',
+    },
+    {
+      locale: 'ko',
+      q: '정품인가요?',
+      a: '제이앤디 공식 정품만 취급하며, 모든 상품은 품질 검수를 거쳐 발송됩니다.',
+    },
+    {
+      locale: 'zh',
+      q: 'J&D 是什么品牌？',
+      a: 'J&D（제이앤디）是主打男女高尔夫服饰、外套、针织、帽子与包袋的高端高尔夫服饰品牌。',
+    },
+    {
+      locale: 'zh',
+      q: '支持海外配送吗？',
+      a: '支持。提供国内及海外配送服务，订单将在工作日 1~2 天内发出。',
+    },
+    {
+      locale: 'zh',
+      q: '是正品吗？',
+      a: '仅销售 J&D 官方正品，所有商品均经质检后发出。',
+    },
+    {
+      locale: 'en',
+      q: 'What is J&D?',
+      a: 'J&D is a premium golfwear brand offering men’s and women’s golf apparel, outerwear, knitwear, headwear and bags.',
+    },
+    {
+      locale: 'en',
+      q: 'Do you ship internationally?',
+      a: 'Yes. We ship both domestically and worldwide, dispatching orders within 1–2 business days.',
+    },
+    {
+      locale: 'en',
+      q: 'Are the products authentic?',
+      a: 'Yes. We sell only official genuine J&D products, all quality-checked before dispatch.',
+    },
+  ];
+  let faqAdded = 0;
+  for (const [i, f] of FAQ_DEFAULTS.entries()) {
+    const exists = await prisma.faqItem.findFirst({
+      where: { question: f.q, locale: f.locale },
+    });
+    if (exists) continue;
+    await prisma.faqItem.create({
+      data: {
+        scope: 'global',
+        target: '',
+        question: f.q,
+        answer: f.a,
+        locale: f.locale,
+        order: i,
+        status: 'published',
+      },
+    });
+    faqAdded++;
+  }
+  console.log(`✓ ${faqAdded} FAQ items (only-if-missing)`);
 
   console.log('🎉 seed complete');
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale } from '@/components/i18n/locale-provider';
@@ -8,6 +8,8 @@ import { useAuth } from '@/components/auth/auth-provider';
 import { useCart, cartCount } from '@/lib/cart-store';
 import { locales, localeNames, type Locale } from '@/i18n/config';
 import { siteConfig } from '@/lib/site';
+
+type NavCategory = { slug: string; name: string; nameZh: string | null };
 
 export function SiteHeader() {
   const { locale, dict } = useLocale();
@@ -17,13 +19,31 @@ export function SiteHeader() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const [navCategories, setNavCategories] = useState<NavCategory[]>([]);
   const count = cartCount(lines);
+
+  // 后台「分类管理」里添加的分类自动出现在导航栏（全部商品之后）
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/site-content')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d?.categories) setNavCategories(d.categories);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const nav = [
     { label: dict.nav.shop, href: `/${locale}/products` },
+    ...navCategories.map((c) => ({
+      label: locale === 'zh' ? c.nameZh || c.name : c.name,
+      href: `/${locale}/products?cat=${encodeURIComponent(c.slug)}`,
+    })),
     { label: dict.nav.women, href: `/${locale}/products?gender=women` },
     { label: dict.nav.men, href: `/${locale}/products?gender=men` },
-    { label: dict.nav.accessories, href: `/${locale}/products?cat=acc` },
     { label: dict.nav.brands, href: `/${locale}/brands` },
     { label: dict.nav.sale, href: `/${locale}/products?sale=1` },
     { label: dict.nav.events, href: `/${locale}/events` },
@@ -34,7 +54,13 @@ export function SiteHeader() {
     const segments = pathname.split('/');
     // segments[0] = '' , segments[1] = current locale
     segments[1] = next;
-    router.push(segments.join('/') || `/${next}`);
+    const newPath = segments.join('/') || `/${next}`;
+    // preserve query string (e.g. ?gender=women) across language switch
+    const qs =
+      typeof window !== 'undefined' && window.location.search
+        ? window.location.search
+        : '';
+    router.push(qs ? `${newPath}${qs}` : newPath);
   }
 
   return (
@@ -45,7 +71,7 @@ export function SiteHeader() {
         <button
           className="lg:hidden p-2 -ml-2"
           onClick={() => setMenuOpen((v) => !v)}
-          aria-label="menu"
+          aria-label={dict.common.menu}
         >
           <span className="block w-6 h-px bg-ink mb-1.5" />
           <span className="block w-6 h-px bg-ink mb-1.5" />
@@ -55,23 +81,43 @@ export function SiteHeader() {
         {/* center/left: logo */}
         <Link
           href={`/${locale}`}
-          className="font-display text-3xl sm:text-4xl text-ink leading-none select-none"
+          className="flex items-center select-none"
+          aria-label={siteConfig.nameKo}
         >
-          {siteConfig.name}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={siteConfig.logo}
+            alt={siteConfig.nameKo}
+            width={120}
+            height={61}
+            className="h-8 sm:h-10 w-auto"
+          />
         </Link>
 
         {/* center: nav (desktop) */}
-        <nav className="hidden lg:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
-          {nav.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="text-sm tracking-wide text-ink-soft hover:text-ink transition-colors relative group"
-            >
-              {item.label}
-              <span className="absolute -bottom-1 left-0 w-0 h-px bg-accent transition-all group-hover:w-full" />
-            </Link>
-          ))}
+        <nav className="hidden lg:flex flex-1 min-w-0 items-center justify-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex items-center gap-5 whitespace-nowrap px-2">
+          {nav.map((item) => {
+            const isActive = pathname === item.href.split('?')[0];
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                aria-current={isActive ? 'page' : undefined}
+                className={`text-sm tracking-wide transition-colors relative group ${
+                  isActive ? 'text-ink' : 'text-ink-soft hover:text-ink'
+                }`}
+              >
+                {item.label}
+                <span
+                  className={`absolute -bottom-1 left-0 h-px bg-accent transition-all duration-300 ${
+                    isActive ? 'w-full' : 'w-0 group-hover:w-full'
+                  }`}
+                />
+              </Link>
+            );
+          })}
+          </div>
         </nav>
 
         {/* right: actions */}
@@ -127,8 +173,7 @@ export function SiteHeader() {
               )}
               <Link
                 href={`/${locale}/account`}
-                aria-label={dict.nav.account}
-                className="p-2 hover:text-accent transition-colors hidden sm:block"
+                aria-label={dict.nav.account}                className="p-2 hover:text-accent transition-colors hidden sm:block"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.6" />
@@ -136,10 +181,15 @@ export function SiteHeader() {
                 </svg>
               </Link>
               <button
-                onClick={() => logout().then(() => router.refresh())}
+                onClick={() =>
+                  logout().then(() => {
+                    // 🔴 硬导航：强制 SSR 重读 session，防止缓存 layout 仍显示旧登录态
+                    window.location.assign(`/${locale}`);
+                  })
+                }
                 className="hidden sm:block text-xs tracking-wide px-2 py-1.5 text-muted hover:text-accent transition-colors"
               >
-                {dict.nav.login === '로그인' ? '로그아웃' : 'Logout'}
+                {dict.account.logout}
               </button>
             </>
           ) : (

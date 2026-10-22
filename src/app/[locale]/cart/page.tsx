@@ -67,7 +67,7 @@ export default function CartPage() {
                 </Link>
                 {l.size && (
                   <p className="text-xs text-muted mt-0.5">
-                    {dict.product.size}: {l.size}
+                    {l.size.includes(':') ? l.size : `${dict.product.size}: ${l.size}`}
                   </p>
                 )}
                 {(() => {
@@ -75,9 +75,7 @@ export default function CartPage() {
                   if (typeof stock !== 'number' || l.qty <= stock) return null;
                   return (
                     <p className="text-xs text-red-600 mt-0.5">
-                      {locale === 'ko'
-                        ? `재고 ${stock}개 — 수량을 조절해 주세요`
-                        : `Only ${stock} in stock`}
+                      {dict.common.stockLimited.replace('{n}', String(stock))}
                     </p>
                   );
                 })()}
@@ -95,7 +93,7 @@ export default function CartPage() {
               <button
                 onClick={() => remove(l.slug, l.size)}
                 className="text-muted hover:text-ink text-sm"
-                aria-label="remove"
+                aria-label={dict.common.remove}
               >
                 ✕
               </button>

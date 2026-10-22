@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Locale } from '@/i18n/config';
 import type { Dict } from '@/i18n/dictionaries';
-import { formatPrice } from '@/lib/format';
+import { formatPrice, productName } from '@/lib/format';
 import type { Product } from '@/lib/types';
 import { WishlistButton } from './wishlist-button';
 
@@ -23,22 +23,38 @@ export function ProductCard({
   dict: Dict;
 }) {
   const href = `/${locale}/products/${product.slug}`;
+  const discounted =
+    typeof product.compareAtPrice === 'number' &&
+    product.compareAtPrice > product.price;
+  const offPercent = discounted
+    ? Math.round((1 - product.price / product.compareAtPrice!) * 100)
+    : 0;
+
   return (
     <Link href={href} className="group block">
-      <div className="card-lift bg-surface-2 rounded-card overflow-hidden">
-        <div className="relative aspect-[3/4] bg-gradient-to-b from-surface to-surface-2 flex items-center justify-center">
+      <div className="card-lift relative bg-surface-2 rounded-card overflow-hidden ring-1 ring-line/60 group-hover:ring-accent/40 transition-all">
+        <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-b from-surface to-surface-2 flex items-center justify-center">
           {product.image ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={product.image}
-              alt={product.name}
-              className="w-full h-full object-cover"
+              alt={productName(product, locale)}
+              loading="lazy"
+              className="w-full h-full object-cover transition-transform duration-[900ms] ease-out group-hover:scale-[1.06]"
             />
           ) : (
             <span className="font-display text-5xl text-line select-none">
               {product.brandCode.slice(0, 2)}
             </span>
           )}
+
+          {/* 悬停时自下而上的查看详情条 */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-out">
+            <div className="bg-ink/90 backdrop-blur-sm text-white text-center text-[11px] tracking-luxe py-3">
+              {dict.common.viewDetail}
+            </div>
+          </div>
+
           <div className="absolute top-3 right-3">
             <WishlistButton slug={product.slug} />
           </div>
@@ -49,7 +65,7 @@ export function ProductCard({
                 return (
                   <span
                     key={b}
-                    className={`text-[10px] tracking-widest px-2 py-1 ${s.cls}`}
+                    className={`text-[10px] tracking-widest px-2.5 py-1 rounded-sm shadow-sm ${s.cls}`}
                   >
                     {s.label}
                   </span>
@@ -57,18 +73,34 @@ export function ProductCard({
               })}
             </div>
           )}
+          {discounted && (
+            <div className="absolute bottom-3 left-3">
+              <span className="text-[11px] font-semibold tracking-wider px-2 py-1 rounded-sm bg-accent text-white">
+                -{offPercent}%
+              </span>
+            </div>
+          )}
         </div>
       </div>
-      <div className="pt-3 pb-1">
-        <p className="text-[11px] tracking-wider text-muted mb-1">
+      <div className="pt-4 pb-1">
+        <p className="text-[11px] tracking-wider text-muted mb-1.5">
           {product.brandCode}
         </p>
         <h3 className="text-sm text-ink leading-snug line-clamp-2 group-hover:text-accent transition-colors">
-          {product.name}
+          {productName(product, locale)}
         </h3>
-        <p className="mt-2 text-sm font-medium text-ink">
-          {formatPrice(product.price, locale)}
-        </p>
+        <div className="mt-2 flex items-baseline gap-2 flex-wrap">
+          <span
+            className={`text-sm font-semibold ${discounted ? 'text-accent-strong' : 'text-ink'}`}
+          >
+            {formatPrice(product.price, locale)}
+          </span>
+          {discounted && (
+            <span className="text-xs text-muted line-through">
+              {formatPrice(product.compareAtPrice!, locale)}
+            </span>
+          )}
+        </div>
       </div>
     </Link>
   );

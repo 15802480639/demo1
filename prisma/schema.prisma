@@ -8,13 +8,14 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ---------------- 用户与地址 ----------------
 model User {
   id           String    @id @default(cuid())
-  email        String    @unique
+  username     String?   @unique // 登录账号（注册时必填，老用户为空则用邮箱登录）
+  email        String?   @unique // 选填
   name         String?
   passwordHash String?
   role         String    @default("customer") // customer | admin
@@ -63,6 +64,7 @@ model Brand {
   id       String    @id @default(cuid())
   slug     String    @unique
   name     String
+  nameZh   String? // 中文品牌名
   logoUrl  String?
   products Product[]
 }
@@ -71,7 +73,9 @@ model Product {
   id            String    @id @default(cuid())
   slug          String    @unique
   name          String
+  nameZh        String? // 中文商品名（后台双语录入，zh 前台优先显示）
   description   String?
+  descriptionZh String? // 中文描述
   code          String? // 货号 / style code（如 GF410），列表卡小字展示
   gender        String? // men | women | unisex
   brandId       String?
@@ -88,6 +92,7 @@ model Product {
   reviewCount   Int       @default(0)
   featured      Boolean   @default(false)
   skus          Sku[]
+  specs        ProductSpec[]
   reviews       Review[]
   wishlist      Wishlist[]
   createdAt     DateTime  @default(now())
@@ -97,6 +102,20 @@ model Product {
   @@index([status])
   @@index([featured])
   @@index([gender])
+}
+
+// 商品规格组（可多组：颜色 / 尺码 / 材质…），每组含多个规格值，中韩双语
+model ProductSpec {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String // 规格名（韩语/默认），如 색상 / 사이즈
+  nameZh    String? // 规格名（中文），如 颜色 / 尺码
+  values    String // JSON: [{"ko":"레드","zh":"红色"}, ...]
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId, order])
 }
 
 model Sku {
@@ -148,6 +167,8 @@ model Order {
   couponCode String?
   trackingNo String?
   carrier    String?
+  contacted  Boolean   @default(false) // 后台客服是否已联系该订单客户
+  contactedAt DateTime?
   addressId  String?
   address    Address?   @relation(fields: [addressId], references: [id], onDelete: SetNull)
   shipmentId String?
@@ -176,6 +197,7 @@ model Coupon {
   type       String // percent | fixed
   value      Int
   minSpend   Int      @default(0)
+  productIds String   @default("[]") // JSON 数组：适用商品 id；空=全场通用
   startsAt   DateTime?
   expiresAt  DateTime?
   usageLimit Int?
@@ -217,4 +239,130 @@ model Wishlist {
   createdAt DateTime @default(now())
 
   @@unique([userId, productId])
+}
+
+// ---------------- 首页轮播图（可后台上传的多图 Banner） ----------------
+model EventItem {
+  id         String   @id @default(cuid())
+  title      String // 标题（韩语，默认语种）
+  titleZh    String? // 标题（中文）
+  subtitle   String?
+  subtitleZh String?
+  badge      String? // 角标（如 LIVE / NEW）
+  imageUrl   String? // 配图（可选）
+  href       String? // 点击跳转
+  order      Int      @default(0)
+  status     String   @default("published") // published | draft
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status, order])
+}
+
+model HeroBanner {
+  id         String   @id @default(cuid())
+  image      String // 图片 URL（/uploads/xxx 或远程 CDN）
+  title      String? // 英文标题
+  titleZh    String? // 中文标题
+  titleKo    String? // 韩文标题（默认语种）
+  subtitle   String?
+  subtitleZh String?
+  subtitleKo String?
+  cta        String? // 按钮文字（英文）
+  ctaZh      String?
+  ctaKo      String?
+  href       String? // CTA 跳转链接
+  order      Int      @default(0)
+  status     String   @default("published") // published | draft
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status])
+  @@index([order])
+}
+
+// ---------------- SEO / GEO 设置 ----------------
+
+/// 站点级设置（KV 存储，key 唯一）。
+/// 用于 SEO 标题/描述/关键词、站长验证码、统计 ID、llms.txt 导语等。
+/// 采用 KV 而非固定列：后续新增设置项无需再改表结构。
+model SiteSetting {
+  key       String   @id
+  value     String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+/// 电子报订阅记录（首页「订阅电子报」区块提交的邮箱）。
+model NewsletterSub {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  locale    String   @default("") // 订阅时所在语种 ko | zh | en
+  status    String   @default("active") // active | unsub
+  createdAt DateTime @default(now())
+
+  // 统计辅助：避免群发时全表扫描
+  @@index([status])
+}
+
+/// 电子报群发记录（每次群发一条，便于回溯发过什么、成功率多少）。
+/// kind=test 表示只发给了测试邮箱，不计入正式群发。
+model NewsletterCampaign {
+  id        String   @id @default(cuid())
+  subject   String
+  body      String
+  locale    String   @default("ko") // 该邮件主要语种
+  kind      String   @default("broadcast") // broadcast | test
+  recipients Int      @default(0) // 目标人数
+  sent      Int      @default(0) // 成功数
+  failed    Int      @default(0) // 失败数
+  dryRun    Boolean  @default(false) // true = 未配 API key，仅日志模式
+  errorLog  String   @default("") // 失败明细（最多存 10 条）
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// FAQ 问答（GEO 答案块 + 产品页 FAQPage schema 数据源）。
+/// scope=global 为站点级 FAQ；scope=product 时 target 填商品 slug。
+/// locale 为空表示适用于全部语种。
+model FaqItem {
+  id        String   @id @default(cuid())
+  scope     String   @default("global") // global | product
+  target    String   @default("") // scope=product 时填商品 slug
+  question  String
+  answer    String
+  locale    String   @default("") // '' | ko | zh | en
+  order     Int      @default(0)
+  status    String   @default("published") // published | draft
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope, target])
+  @@index([status, order])
+}
+
+/// GEO 实体档案：把「品牌是什么 / 卖什么 / 凭什么信」写成结构化事实。
+///
+/// 为什么需要它（对齐记忆库 GEO 手册）：
+///  AI 做实体消歧靠的是**可核对的事实**，而不是形容词堆砌。
+///  一条 kind=claim 的事实（如「发货地：韩国」）会被 llms.txt / llms-full.txt /
+///  Organization JSON-LD 反复引用，成为「品牌 ↔ 属性」的硬关联。
+///  这张表是纯新增，不修改任何既有表与数据。
+model GeoFact {
+  id        String   @id @default(cuid())
+  /// fact | claim | differentiator | audience | shipping | payment | contact
+  kind      String   @default("fact")
+  /// 事实的键，如「Founded」「Shipping origin」。同 kind 下不重复校验（保持宽容）
+  label     String
+  /// 事实的值，如「2019」。空则视为草稿，不对外输出
+  value     String
+  locale    String   @default("") // '' = 全语种通用
+  order     Int      @default(0)
+  status    String   @default("published") // published | draft
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind, order])
+  @@index([status])
+  @@index([locale])
 }

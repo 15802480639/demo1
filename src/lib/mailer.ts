@@ -2,14 +2,22 @@
 // 若设置了 SMTP_*/RESEND_API_KEY 则真实发送，否则仅打印日志、不报错。
 // 这样在演示/原型环境无需凭据也能正常运行。
 
-type MailInput = { to: string; subject: string; html: string };
+export type MailProvider = 'resend' | 'dryrun';
 
-export async function sendEmail({ to, subject, html }: MailInput): Promise<void> {
+/** 当前是否真实发信（有 provider 且有 key）。false = 只写日志，可上线前验证全流程。 */
+export function isLiveMail(): boolean {
+  const resendKey = process.env.RESEND_API_KEY;
+  return !!(process.env.SMTP_HOST || resendKey);
+}
+
+type MailInput = { to: string; subject: string; html: string; text?: string };
+
+export async function sendEmail({ to, subject, html, text }: MailInput): Promise<void> {
   const smtpHost = process.env.SMTP_HOST;
   const resendKey = process.env.RESEND_API_KEY;
 
   if (!smtpHost && !resendKey) {
-    console.log('[mail] skipped (no SMTP/RESEND config):', to, subject);
+    console.log('[mail] DRYRUN (未配置 RESEND_API_KEY / SMTP_HOST):', to, '|', subject);
     return;
   }
 
@@ -26,7 +34,10 @@ export async function sendEmail({ to, subject, html }: MailInput): Promise<void>
           to,
           subject,
           html,
+          ...(text ? { text } : {}),
         }),
+        // 群发时单封挂死不能拖垮整批
+        signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) {
         console.error('[mail] resend failed', res.status, await res.text().catch(() => ''));
@@ -54,10 +65,50 @@ export async function sendEmail({ to, subject, html }: MailInput): Promise<void>
       to,
       subject,
       html,
+      ...(text ? { text } : {}),
     });
   } catch (e) {
     console.error('[mail] send error', e);
   }
+}
+
+/**
+ * 群发单封的返回值包装 —— **永远不抛异常**，
+ * 单封失败不能中断整批（否则第 3 封挂了后面全发不出去）。
+ */
+export async function sendMailSafe(
+  input: MailInput
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await sendEmail(input);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * 串行群发 + 限速。
+ * 串行是刻意的：并发打满会触发服务商风控，本机内存也扛不住。
+ */
+export async function sendBatch(
+  items: MailInput[],
+  opts?: { gapMs?: number }
+): Promise<{ total: number; ok: number; failed: number; errors: string[] }> {
+  const gap = opts?.gapMs ?? 300;
+  let ok = 0;
+  let failed = 0;
+  const errors: string[] = [];
+  for (const item of items) {
+    const r = await sendMailSafe(item);
+    if (r.ok) ok++;
+    else {
+      failed++;
+      if (errors.length < 10) errors.push(`${item.to}: ${r.error}`);
+    }
+    if (gap > 0) await new Promise((r) => setTimeout(r, gap));
+  }
+  return { total: items.length, ok, failed, errors };
 }
 
 export function orderConfirmationHtml(opts: {

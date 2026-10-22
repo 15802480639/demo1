@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLocale } from '@/components/i18n/locale-provider';
 
 type Addr = {
   id: string;
@@ -15,20 +16,20 @@ type Addr = {
   isDefault: boolean;
 };
 
-const EMPTY = {
-  name: '',
-  line1: '',
-  line2: '',
-  city: '',
-  state: '',
-  country: '대한민국',
-  postalCode: '',
-  phone: '',
-  isDefault: false,
-};
-
-export function AddressManager({ locale }: { locale: string }) {
-  const t = (ko: string, en: string) => (locale === 'ko' ? ko : en);
+export function AddressManager() {
+  const { dict } = useLocale();
+  const t = dict.account;
+  const EMPTY = {
+    name: '',
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    country: dict.checkout.countryDefault,
+    postalCode: '',
+    phone: '',
+    isDefault: false,
+  };
   const [list, setList] = useState<Addr[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Addr | null>(null);
@@ -74,7 +75,7 @@ export function AddressManager({ locale }: { locale: string }) {
     e.preventDefault();
     setErr('');
     if (!form.line1 || !form.city || !form.postalCode) {
-      setErr(t('필수 항목을 입력하세요', 'Required fields missing'));
+      setErr(t.requiredMissing);
       return;
     }
     const body = { ...form };
@@ -90,7 +91,7 @@ export function AddressManager({ locale }: { locale: string }) {
           body: JSON.stringify(body),
         });
     if (!res.ok) {
-      setErr(t('저장 실패', 'Save failed'));
+      setErr(t.saveFailed);
       return;
     }
     close();
@@ -98,7 +99,7 @@ export function AddressManager({ locale }: { locale: string }) {
   }
 
   async function remove(id: string) {
-    if (!confirm(t('삭제할까요?', 'Delete this address?'))) return;
+    if (!confirm(t.deleteConfirm)) return;
     await fetch(`/api/account/addresses/${id}`, { method: 'DELETE' });
     load();
   }
@@ -116,15 +117,15 @@ export function AddressManager({ locale }: { locale: string }) {
   return (
     <section className="border border-line p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display text-2xl text-ink">{t('배송지 관리', 'My Addresses')}</h2>
+        <h2 className="font-display text-2xl text-ink">{t.myAddresses}</h2>
         <button onClick={openNew} className="btn-gold text-sm px-4 py-2">
-          + {t('추가', 'Add')}
+          + {t.addAddress}
         </button>
       </div>
       {loading ? (
         <p className="text-muted text-sm">…</p>
       ) : list.length === 0 ? (
-        <p className="text-muted text-sm">{t('등록된 배송지가 없습니다', 'No saved addresses')}</p>
+        <p className="text-muted text-sm">{t.noAddresses}</p>
       ) : (
         <div className="space-y-3">
           {list.map((a) => (
@@ -135,7 +136,7 @@ export function AddressManager({ locale }: { locale: string }) {
                     {a.name || a.line1}{' '}
                     {a.isDefault && (
                       <span className="text-[10px] tracking-widest text-accent border border-accent px-1.5 py-0.5 ml-1">
-                        {t('기본', 'DEFAULT')}
+                        {t.defaultTag}
                       </span>
                     )}
                   </p>
@@ -149,15 +150,15 @@ export function AddressManager({ locale }: { locale: string }) {
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <button onClick={() => openEdit(a)} className="text-xs px-3 py-1.5 border border-line hover:border-ink">
-                    {t('수정', 'Edit')}
+                    {t.edit}
                   </button>
                   {!a.isDefault && (
                     <button onClick={() => setDefault(a.id)} className="text-xs px-3 py-1.5 border border-line hover:border-accent text-accent">
-                      {t('기본설정', 'Set default')}
+                      {t.setDefault}
                     </button>
                   )}
                   <button onClick={() => remove(a.id)} className="text-xs px-3 py-1.5 border border-line hover:border-red-500 text-red-600">
-                    {t('삭제', 'Delete')}
+                    {t.delete}
                   </button>
                 </div>
               </div>
@@ -170,54 +171,54 @@ export function AddressManager({ locale }: { locale: string }) {
         <form onSubmit={save} className="bg-bg w-full max-w-md my-8 border border-line p-6 space-y-3">
           <div className="flex justify-between items-center">
             <h3 className="font-display text-2xl text-ink">
-              {editing ? t('배송지 수정', 'Edit Address') : t('배송지 추가', 'New Address')}
+              {editing ? t.editAddress : t.newAddress}
             </h3>
             <button type="button" onClick={close} className="text-muted hover:text-ink">✕</button>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">{t('받는 분', 'Recipient')}</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.recipient}</label>
               <input className={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">Phone</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.phone}</label>
               <input className={input} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </div>
           </div>
           <div>
-            <label className="text-xs tracking-widest text-muted block mb-1">{t('주소', 'Address')} *</label>
+            <label className="text-xs tracking-widest text-muted block mb-1">{t.addressLabel} *</label>
             <input className={input} value={form.line1} onChange={(e) => setForm({ ...form, line1: e.target.value })} required />
           </div>
           <div>
-            <label className="text-xs tracking-widest text-muted block mb-1">{t('상세주소', 'Address 2')}</label>
+            <label className="text-xs tracking-widest text-muted block mb-1">{t.address2Label}</label>
             <input className={input} value={form.line2} onChange={(e) => setForm({ ...form, line2: e.target.value })} />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">{t('도시', 'City')} *</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.city} *</label>
               <input className={input} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">{t('지역', 'State')}</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.state}</label>
               <input className={input} value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">{t('우편번호', 'Postal')} *</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.postal} *</label>
               <input className={input} value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} required />
             </div>
           </div>
           <div>
-            <label className="text-xs tracking-widest text-muted block mb-1">{t('국가', 'Country')}</label>
+            <label className="text-xs tracking-widest text-muted block mb-1">{t.country}</label>
             <input className={input} value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} />
-            {t('기본 배송지로 설정', 'Set as default')}
+            {t.setDefaultCheck}
           </label>
           {err && <p className="text-sm text-red-600">{err}</p>}
           <div className="flex gap-3 pt-2">
-            <button type="submit" className="btn-gold">{t('저장', 'Save')}</button>
-            <button type="button" onClick={close} className="btn-outline">{t('취소', 'Cancel')}</button>
+            <button type="submit" className="btn-gold">{t.save}</button>
+            <button type="button" onClick={close} className="btn-outline">{t.cancel}</button>
           </div>
         </form>
       </div>

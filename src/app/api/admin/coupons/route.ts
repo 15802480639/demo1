@@ -8,6 +8,20 @@ export async function GET() {
   return NextResponse.json({ coupons });
 }
 
+/** 解析适用商品 id 列表：数组或 JSON 字符串都接受，空 = 全场通用 */
+function parseProductIds(v: unknown): string {
+  let arr: unknown = v;
+  if (typeof v === 'string') {
+    try {
+      arr = JSON.parse(v);
+    } catch {
+      arr = [];
+    }
+  }
+  if (!Array.isArray(arr)) return '[]';
+  return JSON.stringify(arr.filter((x) => typeof x === 'string' && x).slice(0, 500));
+}
+
 export async function POST(req: NextRequest) {
   await requireAdmin();
   const b = await req.json();
@@ -21,6 +35,7 @@ export async function POST(req: NextRequest) {
       type: b.type === 'fixed' ? 'fixed' : 'percent',
       value: Number(b.value),
       minSpend: Number(b.minSpend) || 0,
+      productIds: parseProductIds(b.productIds),
       startsAt: b.startsAt ? new Date(b.startsAt) : null,
       expiresAt: b.expiresAt ? new Date(b.expiresAt) : null,
       usageLimit: b.usageLimit ? Number(b.usageLimit) : null,
@@ -42,6 +57,7 @@ export async function PUT(req: NextRequest) {
       type: b.type === 'fixed' ? 'fixed' : 'percent',
       value: Number(b.value),
       minSpend: Number(b.minSpend) || 0,
+      productIds: parseProductIds(b.productIds),
       startsAt: b.startsAt ? new Date(b.startsAt) : null,
       expiresAt: b.expiresAt ? new Date(b.expiresAt) : null,
       usageLimit: b.usageLimit ? Number(b.usageLimit) : null,

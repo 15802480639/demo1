@@ -5,6 +5,7 @@ export type Gender = 'men' | 'women' | 'unisex';
 export type Product = {
   slug: string;
   name: string;
+  nameZh?: string; // 中文名（zh 前台优先显示）
   brandCode: string; // 货号 / style code（如 GF410）
   price: number; // 韩元 ₩
   compareAtPrice?: number;
@@ -23,6 +24,12 @@ export type ProductSku = {
   stock: number;
 };
 
+export type ProductSpecView = {
+  name: string; // 规格名（韩语/默认）
+  nameZh?: string | null; // 规格名（中文）
+  values: { ko: string; zh?: string }[];
+};
+
 export type ReviewView = {
   id: string;
   rating: number;
@@ -34,8 +41,10 @@ export type ReviewView = {
 
 export type ProductDetail = Product & {
   description: string;
+  descriptionZh?: string; // 中文描述
   brand: string;
   images: string[];
   skus: ProductSku[];
+  specs: ProductSpecView[]; // 多规格（可多组）
   reviews: ReviewView[];
 };

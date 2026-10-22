@@ -17,6 +17,7 @@ export interface ProductFilter {
 type ProductRow = {
   slug: string;
   name: string;
+  nameZh?: string | null;
   code: string | null;
   price: number; // SQLite Int -> number
   compareAtPrice: number | null;
@@ -53,6 +54,7 @@ export function toView(p: ProductRow): Product {
   return {
     slug: p.slug,
     name: p.name,
+    nameZh: p.nameZh ?? undefined,
     brandCode: p.code ?? p.brand?.name ?? '',
     price: p.price,
     compareAtPrice: p.compareAtPrice ?? undefined,
@@ -130,6 +132,18 @@ export async function getStockMap(slugs: string[]): Promise<Record<string, numbe
   return map;
 }
 
+function parseSpecValues(v: string | null): { ko: string; zh?: string }[] {
+  try {
+    const arr = JSON.parse(v ?? '[]');
+    if (!Array.isArray(arr)) return [];
+    return arr.map((x: unknown) =>
+      typeof x === 'string' ? { ko: x } : (x as { ko: string; zh?: string }),
+    );
+  } catch {
+    return [];
+  }
+}
+
 export async function getProductBySlug(slug: string): Promise<ProductDetail | null> {
   const p = await prisma.product.findUnique({
     where: { slug },
@@ -137,6 +151,7 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
       brand: true,
       category: true,
       skus: true,
+      specs: { orderBy: { order: 'asc' } },
       reviews: { include: { user: true }, orderBy: { createdAt: 'desc' } },
     },
   });
@@ -146,6 +161,7 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
   return {
     ...base,
     description: p.description ?? '',
+    descriptionZh: (p as unknown as { descriptionZh?: string | null }).descriptionZh ?? undefined,
     brand: p.brand?.name ?? '',
     images: parseArray(p.images),
     skus: p.skus.map((s) => ({
@@ -154,6 +170,11 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
       options: parseObj(s.options),
       price: s.price == null ? undefined : s.price,
       stock: s.stock,
+    })),
+    specs: (p.specs ?? []).map((sp) => ({
+      name: sp.name,
+      nameZh: sp.nameZh ?? undefined,
+      values: parseSpecValues(sp.values),
     })),
     reviews: p.reviews.map((r) => ({
       id: r.id,

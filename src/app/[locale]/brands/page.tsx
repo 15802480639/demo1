@@ -46,7 +46,7 @@ export default async function BrandsPage({
           </Link>
         ))}
         {brands.length === 0 && (
-          <p className="col-span-full p-6 text-sm text-muted">No brands yet.</p>
+          <p className="col-span-full p-6 text-sm text-muted">{dict.common.noBrands}</p>
         )}
       </div>
     </div>

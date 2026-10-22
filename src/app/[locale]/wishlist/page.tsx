@@ -46,7 +46,7 @@ export default function WishlistPage() {
     return (
       <div className="mx-auto max-w-[900px] px-4 sm:px-8 py-24 text-center">
         <h1 className="font-display text-4xl text-ink mb-4">{dict.nav.wishlist}</h1>
-        <p className="text-muted mb-6">{locale === 'ko' ? '로그인이 필요합니다.' : 'Login required'}</p>
+        <p className="text-muted mb-6">{dict.checkout.loginRequired}</p>
         <Link href={`/${locale}/login?redirect=/${locale}/wishlist`} className="btn-gold">
           {dict.nav.login}
         </Link>
@@ -60,7 +60,7 @@ export default function WishlistPage() {
         <h1 className="font-display text-4xl sm:text-6xl text-ink">{dict.nav.wishlist}</h1>
         {items.length > 0 && (
           <button onClick={moveAll} className="btn-outline text-sm">
-            {locale === 'ko' ? '전체 담기' : 'Add all to cart'}
+            {dict.common.addAllToCart}
           </button>
         )}
       </div>
@@ -76,7 +76,7 @@ export default function WishlistPage() {
               <button
                 onClick={() => remove(p.slug)}
                 className="absolute top-2 right-2 z-10 w-8 h-8 bg-white/80 text-ink hover:text-red-600 text-sm"
-                aria-label="remove"
+                aria-label={dict.common.remove}
               >
                 ✕
               </button>

@@ -13,3 +13,19 @@ const LABELS: Record<string, { ko: string; zh: string; en: string }> = {
 export function statusLabel(status: string, locale: Locale): string {
   return LABELS[status]?.[locale] ?? status;
 }
+
+/** 商品状态：后台固定显示中文 */
+const PRODUCT_LABELS: Record<string, string> = {
+  draft: '草稿',
+  active: '在售',
+  archived: '已归档',
+};
+
+export function productStatusLabel(status: string): string {
+  return PRODUCT_LABELS[status] ?? status;
+}
+
+/** Banner 上下架状态：后台固定显示中文 */
+export function bannerStatusLabel(status: string): string {
+  return status === 'published' ? '已上架' : status === 'draft' ? '草稿' : status;
+}

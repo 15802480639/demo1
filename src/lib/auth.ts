@@ -11,8 +11,9 @@ const MAX_AGE = 60 * 60 * 24 * 7; // 7 天
 
 export type SessionUser = {
   id: string;
+  username?: string | null;
   name: string | null;
-  email: string;
+  email: string | null; // 邮箱选填后可为空
   role: string; // customer | admin
 };
 
@@ -35,9 +36,10 @@ export function verifySessionToken(token: string | undefined): SessionUser | nul
   if (sign(payload) !== sig) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    const { iat, ...user } = data;
-    if (!user.id || !user.email) return null;
-    return user as SessionUser;
+      const { iat, ...user } = data;
+      // 邮箱选填后可为空，只要有 id 就是有效会话
+      if (!user.id) return null;
+      return user as SessionUser;
   } catch {
     return null;
   }
@@ -68,15 +70,31 @@ export async function verifyPassword(pw: string, hash: string): Promise<boolean>
 }
 
 // 便捷守卫
+/**
+ * 带 HTTP 状态码的鉴权错误。
+ * ⚠️ 2026-10-20：以前鉴权失败是裸 throw Error → Next.js 兜成 **500**，
+ * 本地调试时极易误判成「服务器炸了」（真实案例：Playwright 因 Secure cookie
+ * 拒收导致 500，排查了半天业务逻辑）。现在改为 401/403，语义正确。
+ */
+export class HttpError extends Error {
+  constructor(
+    public status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
 export async function requireUser(): Promise<SessionUser> {
   const s = await getSession();
-  if (!s) throw new Error('UNAUTHENTICATED');
+  if (!s) throw new HttpError(401, 'UNAUTHENTICATED');
   return s;
 }
 
 export async function requireAdmin(): Promise<SessionUser> {
   const s = await requireUser();
-  if (s.role !== 'admin') throw new Error('FORBIDDEN');
+  if (s.role !== 'admin') throw new HttpError(403, 'FORBIDDEN');
   return s;
 }
 

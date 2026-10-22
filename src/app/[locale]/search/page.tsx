@@ -8,11 +8,7 @@ import { ProductCard } from '@/components/product/product-card';
 import { Pagination } from '@/components/ui/pagination';
 
 const PER_PAGE = 12;
-const SORTS = [
-  { value: 'new', label: { ko: '최신순', zh: '最新', en: 'Newest' } },
-  { value: 'priceAsc', label: { ko: '가격 낮은순', zh: '价格升序', en: 'Price ↑' } },
-  { value: 'priceDesc', label: { ko: '가격 높은순', zh: '价格降序', en: 'Price ↓' } },
-] as const;
+const SORT_VALUES = ['new', 'priceAsc', 'priceDesc'] as const;
 
 export default function SearchPage() {
   const { locale, dict } = useLocale();
@@ -58,6 +54,11 @@ export default function SearchPage() {
   }, [debounced, sort, page]);
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const sortLabels: Record<string, string> = {
+    new: dict.common.sortNewest,
+    priceAsc: dict.common.sortPriceAsc,
+    priceDesc: dict.common.sortPriceDesc,
+  };
   const qs = (extra: Record<string, string | number>) => {
     const params = new URLSearchParams();
     if (debounced) params.set('q', debounced);
@@ -86,9 +87,9 @@ export default function SearchPage() {
           onChange={(e) => setSort(e.target.value)}
           className="border border-line bg-surface px-3 py-2 outline-none focus:border-accent"
         >
-          {SORTS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label[locale]}
+          {SORT_VALUES.map((v) => (
+            <option key={v} value={v}>
+              {sortLabels[v]}
             </option>
           ))}
         </select>
@@ -96,8 +97,8 @@ export default function SearchPage() {
           {loading
             ? '…'
             : debounced
-              ? `${total} ${locale === 'ko' ? '개의 결과' : 'results'}`
-              : locale === 'ko' ? '검색어를 입력하세요' : 'Start typing to search'}
+              ? dict.common.resultsCount.replace('{n}', String(total))
+              : dict.common.searchHint}
         </span>
       </div>
 

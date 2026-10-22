@@ -24,17 +24,17 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     name: '',
     phone: '',
-    email: user?.email ?? '',
+    email: '',
     line1: '',
     line2: '',
     city: '',
     state: '',
-    country: '대한민국',
+    country: dict.checkout.countryDefault,
     postalCode: '',
-  });
+  }));
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -52,21 +52,38 @@ export default function CheckoutPage() {
     const res = await fetch('/api/coupons/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: coupon, subtotal: total }),
+      body: JSON.stringify({
+        code: coupon,
+        subtotal: total,
+        items: lines.map((l) => ({ slug: l.slug, price: l.price, qty: l.qty })),
+      }),
     });
     const d = await res.json();
     if (d.ok) {
       setDiscount(d.discount);
-      setCouponMsg('✓ -' + d.discount.toLocaleString() + ' ₩');
+      setCouponMsg(
+        dict.checkout.couponApplied +
+          d.discount.toLocaleString() +
+          ' ₩' +
+          (d.applicableOnly ? ' ' + dict.checkout.couponLimited : ''),
+      );
     } else {
       setDiscount(0);
-      setCouponMsg(d.error === 'EXPIRED' ? '만료된 쿠폰' : '유효하지 않은 쿠폰');
+      setCouponMsg(
+        d.error === 'EXPIRED'
+          ? dict.checkout.couponExpired
+          : d.error === 'NOT_APPLICABLE'
+            ? dict.checkout.couponNotApplicable
+            : dict.checkout.couponInvalid,
+      );
     }
   }
 
-  // 登录用户预填默认地址
+  // 登录用户预填邮箱与默认地址
   useEffect(() => {
-    if (!user || form.line1) return;
+    if (!user) return;
+    setForm((f) => (f.email ? f : { ...f, email: user.email ?? '' }));
+    if (form.line1) return;
     fetch('/api/account/addresses')
       .then((r) => r.json())
       .then((d) => {
@@ -88,6 +105,7 @@ export default function CheckoutPage() {
         }
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const total = cartTotal(lines);
@@ -111,25 +129,18 @@ export default function CheckoutPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.error?.startsWith('STOCK')) {
-          setErr(
-            locale === 'ko'
-              ? `${data.error.replace('STOCK:', '')} 의 재고가 부족합니다`
-              : `Insufficient stock: ${data.error.replace('STOCK:', '')}`,
-          );
+        if (data.error?.startsWith('STOCK:')) {
+          const item = data.error.replace('STOCK:', '');
+          setErr(`${item} ${dict.checkout.insufficientStock}`);
         } else {
-          setErr(
-            locale === 'ko'
-              ? '주문 처리 중 오류가 발생했습니다'
-              : 'Order failed. Please try again.',
-          );
+          setErr(dict.checkout.orderFailed);
         }
         return;
       }
       clear();
       setPlaced(data.order);
     } catch {
-      setErr('Order failed');
+      setErr(dict.checkout.orderFailed);
     } finally {
       setLoading(false);
     }
@@ -140,10 +151,10 @@ export default function CheckoutPage() {
       <div className="mx-auto max-w-[700px] px-4 sm:px-8 py-24 text-center">
         <div className="font-display text-5xl text-accent mb-4">✓</div>
         <h1 className="font-display text-4xl text-ink mb-3">
-          {dict.nav.account === '마이페이지' ? '주문 완료' : 'Order Complete'}
+          {dict.checkout.orderComplete}
         </h1>
         <p className="text-muted mb-1">
-          {dict.nav.account === '마이페이지' ? '주문번호' : 'Order No.'}:{' '}
+          {dict.checkout.orderNo}:{' '}
           <span className="text-ink">{placed.orderNo}</span>
         </p>
         <div className="text-left border border-line mt-8 p-6 space-y-3">
@@ -166,11 +177,33 @@ export default function CheckoutPage() {
         <div className="mt-8 flex gap-3 justify-center">
           {user && (
             <Link href={`/${locale}/account/orders`} className="btn-outline">
-              {dict.nav.account === '마이페이지' ? '주문 내역' : 'My Orders'}
+              {dict.checkout.myOrders}
             </Link>
           )}
           <Link href={`/${locale}`} className="btn-gold">
-            {dict.nav.home}
+            {dict.checkout.continueShopping}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 未登录：不允许结算，引导注册/登录
+  if (!user) {
+    return (
+      <div className="mx-auto max-w-[560px] px-4 sm:px-8 py-24 text-center">
+        <h1 className="font-display text-3xl text-ink mb-3">
+          {dict.checkout.loginRequired}
+        </h1>
+        <p className="text-sm text-muted mb-8">
+          {dict.checkout.loginRequiredDesc}
+        </p>
+        <div className="flex gap-3 justify-center">
+          <Link href={`/${locale}/register`} className="btn-gold">
+            {dict.checkout.goRegister}
+          </Link>
+          <Link href={`/${locale}/login`} className="btn-outline">
+            {dict.checkout.goLogin}
           </Link>
         </div>
       </div>
@@ -198,7 +231,7 @@ export default function CheckoutPage() {
 
       {lines.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-muted mb-6">—</p>
+          <p className="text-muted mb-6">{dict.checkout.emptyCart}</p>
           <Link href={`/${locale}/products`} className="btn-gold">
             {dict.nav.shop}
           </Link>
@@ -206,18 +239,18 @@ export default function CheckoutPage() {
       ) : (
         <form onSubmit={submit} className="grid md:grid-cols-5 gap-10">
           <div className="md:col-span-3 space-y-4">
-            {field('name', dict.nav.account)}
-            {field('phone', 'Phone')}
-            {field('email', 'Email', 'email')}
-            {field('line1', 'Address')}
-            {field('line2', 'Address 2 (optional)')}
+            {field('name', dict.account.recipient)}
+            {field('phone', dict.account.phone)}
+            {field('email', dict.account.email, 'email')}
+            {field('line1', dict.account.addressLabel)}
+            {field('line2', dict.account.address2Label)}
             <div className="grid grid-cols-2 gap-4">
-              {field('city', 'City')}
-              {field('postalCode', 'Postal Code')}
+              {field('city', dict.account.city)}
+              {field('postalCode', dict.account.postal)}
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {field('state', 'State / Region')}
-              {field('country', 'Country')}
+              {field('state', dict.account.state)}
+              {field('country', dict.account.country)}
             </div>
             {err && <p className="text-sm text-red-600">{err}</p>}
           </div>
@@ -253,7 +286,7 @@ export default function CheckoutPage() {
                 <input
                   value={coupon}
                   onChange={(e) => setCoupon(e.target.value)}
-                  placeholder={locale === 'ko' ? '쿠폰' : 'COUPON'}
+                  placeholder={dict.checkout.couponPlaceholder}
                   className="flex-1 border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
                 />
                 <button
@@ -261,7 +294,7 @@ export default function CheckoutPage() {
                   onClick={applyCoupon}
                   className="btn-outline text-sm px-4"
                 >
-                  {locale === 'ko' ? '적용' : 'Apply'}
+                  {dict.checkout.apply}
                 </button>
               </div>
               {couponMsg && (
@@ -273,7 +306,7 @@ export default function CheckoutPage() {
 
             {discount > 0 && (
               <div className="flex justify-between text-sm text-accent mt-3">
-                <span>{locale === 'ko' ? '할인' : 'Discount'}</span>
+                <span>{dict.checkout.discountLabel}</span>
                 <span>-{formatPrice(discount, locale)}</span>
               </div>
             )}

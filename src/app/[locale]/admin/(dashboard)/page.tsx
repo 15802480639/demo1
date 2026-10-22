@@ -11,7 +11,7 @@ export default async function AdminDashboard({
 }) {
   const { locale } = await params;
   const loc = (isLocale(locale) ? locale : 'ko') as Locale;
-  const dict = getDictionary(loc);
+  const dict = getDictionary('zh'); // 后台固定中文
 
   const [productCount, orderCount, customerCount, revenue, recentOrders] =
     await Promise.all([
@@ -26,12 +26,13 @@ export default async function AdminDashboard({
       }),
     ]);
 
+  const t = dict.admin;
   const cards = [
-    { label: dict.nav.shop, href: `/${loc}/admin/products`, n: productCount },
-    { label: dict.nav.cart, href: `/${loc}/admin/orders`, n: orderCount },
-    { label: dict.nav.account, href: `/${loc}/admin/customers`, n: customerCount },
+    { label: t.totalProducts, href: `/${loc}/admin/products`, n: productCount },
+    { label: t.totalOrders, href: `/${loc}/admin/orders`, n: orderCount },
+    { label: t.totalUsers, href: `/${loc}/admin/customers`, n: customerCount },
     {
-      label: dict.common.price,
+      label: t.totalRevenue,
       href: `/${loc}/admin/orders`,
       n: formatPrice(revenue._sum.total ?? 0, loc),
     },
@@ -39,7 +40,7 @@ export default async function AdminDashboard({
 
   return (
     <div>
-      <h1 className="font-display text-3xl text-ink mb-6">Dashboard</h1>
+      <h1 className="font-display text-3xl text-ink mb-6">{t.dashboard}</h1>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((c) => (
           <Link
@@ -53,9 +54,7 @@ export default async function AdminDashboard({
         ))}
       </div>
 
-      <h2 className="font-display text-xl text-ink mt-10 mb-4">
-        {dict.nav.cart === '장바구니' ? '최근 주문' : 'Recent Orders'}
-      </h2>
+      <h2 className="font-display text-xl text-ink mt-10 mb-4">{t.recentOrders}</h2>
       <div className="border border-line divide-y divide-line">
         {recentOrders.length === 0 && (
           <p className="p-5 text-sm text-muted">—</p>

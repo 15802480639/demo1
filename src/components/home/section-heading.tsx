@@ -10,21 +10,25 @@ export function SectionHeading({
   center?: boolean;
 }) {
   return (
-    <div className={`mb-10 ${center ? 'text-center' : 'text-left'}`}>
+    <div className={`mb-12 ${center ? 'text-center' : 'text-left'}`}>
       {eyebrow && (
-        <p className="tracking-luxe text-xs text-accent mb-3">{eyebrow}</p>
+        <p className="tracking-luxe text-[11px] text-accent mb-4">{eyebrow}</p>
       )}
-      <h2 className="font-display text-3xl sm:text-5xl text-ink">{title}</h2>
+      <h2 className="font-display text-[2rem] leading-tight sm:text-5xl lg:text-[3.25rem] text-ink">
+        {title}
+      </h2>
       {subtitle && (
-        <p className="mt-4 text-muted text-sm sm:text-base max-w-xl mx-auto">
+        <p
+          className={`mt-4 text-muted text-sm sm:text-base max-w-xl leading-relaxed ${
+            center ? 'mx-auto' : ''
+          }`}
+        >
           {subtitle}
         </p>
       )}
-      <div
-        className={`mt-6 h-px bg-line w-16 ${
-          center ? 'mx-auto' : ''
-        }`}
-      />
+      <div className={`mt-7 w-28 ${center ? 'mx-auto' : ''}`}>
+        <div className="luxe-rule" />
+      </div>
     </div>
   );
 }

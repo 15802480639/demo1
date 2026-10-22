@@ -13,9 +13,17 @@ import { JsonLd } from '@/components/seo/json-ld';
 import { LocaleProvider } from '@/components/i18n/locale-provider';
 import { AuthProvider } from '@/components/auth/auth-provider';
 import { getSession } from '@/lib/auth';
-import { AnnouncementBar } from '@/components/layout/announcement-bar';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SiteFooter } from '@/components/layout/site-footer';
+import { SiteChrome } from '@/components/layout/site-chrome';
+import {
+  clampTitle,
+  clampDesc,
+  metaVerificationTags,
+  siteMetaDefaults,
+  siteOgImage,
+  siteGaId,
+} from '@/lib/seo';
 
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
@@ -29,18 +37,52 @@ export async function generateMetadata({
   const { locale } = await params;
   const loc = (isLocale(locale) ? locale : defaultLocale) as Locale;
   const dict = getDictionary(loc);
-  const title = `${siteConfig.name} — ${dict.home.seoHeading}`;
-  const description = dict.home.seoBody;
+
+  // 🔴 后台「SEO 设置」填的值必须真正生效（之前 8 个字段前台零引用，站长验证永远做不了）
+  const [defaults, verification, ogImage] = await Promise.all([
+    siteMetaDefaults(),
+    metaVerificationTags(),
+    siteOgImage(),
+  ]);
+
+  const rawTitle = defaults.title || `${siteConfig.name} — ${dict.home.seoHeading}`;
+  const title = clampTitle(rawTitle);
+  const description = clampDesc(defaults.description || dict.home.seoBody);
+  const base = siteConfig.url.replace(/\/$/, '');
+
   const languages: Record<string, string> = {};
-  for (const l of locales) languages[l] = `/${l}`;
-  languages['x-default'] = `/${defaultLocale}`;
+  for (const l of locales) languages[l] = `${base}/${l}`;
+  languages['x-default'] = `${base}/${defaultLocale}`;
+
+  const ogImg = ogImage || `${base}/og-default.png`;
 
   return {
-    metadataBase: new URL(siteConfig.url),
+    metadataBase: new URL(base),
     title: { default: title, template: `%s | ${siteConfig.name}` },
     description,
+    keywords: defaults.keywords.length > 0
+      ? defaults.keywords
+      : [
+          'golfwear',
+          'golf apparel',
+          'golf jacket',
+          'J&D',
+          '제이앤디',
+          '골프웨어',
+          '高尔夫服饰',
+        ],
+    // 站长平台验证标签：后台填值即输出，无需重新 build
+    verification: {
+      google: verification['google-site-verification'],
+      yahoo: undefined,
+      yandex: undefined,
+      me: verification['msvalidate.01'],
+    },
+    other: {
+      ...verification,
+    },
     alternates: {
-      canonical: `/${loc}`,
+      canonical: `${base}/${loc}`,
       languages,
     },
     openGraph: {
@@ -48,13 +90,15 @@ export async function generateMetadata({
       siteName: siteConfig.name,
       title,
       description,
-      url: `/${loc}`,
+      url: `${base}/${loc}`,
       locale: loc,
+      images: [{ url: ogImg, width: 1200, height: 630, alt: title }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      images: [ogImg],
     },
     robots: { index: true, follow: true },
   };
@@ -73,6 +117,11 @@ export default async function LocaleLayout({
   const dict = getDictionary(loc);
   const session = await getSession();
 
+  // ⚠️ JsonLd 组件目前是同步渲染在 body 里的；这里改成在 head 里输出
+  // Organization 必须异步读库（后台 sameAs / 公司信息），所以 layout 改为 async 动态
+  const { organizationJsonLd, webSiteJsonLd } = await import('@/lib/seo');
+  const [organization, gaId] = await Promise.all([organizationJsonLd(), siteGaId()]);
+
   return (
     <html lang={loc}>
       <head>
@@ -90,23 +139,49 @@ export default async function LocaleLayout({
           href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&display=swap"
           rel="stylesheet"
         />
-      </head>
-      <body>
-        <JsonLd
-          data={{
-            '@type': 'Organization',
-            name: siteConfig.name,
-            url: siteConfig.url,
-            logo: `${siteConfig.url}/logo.png`,
-            sameAs: [siteConfig.youtube, siteConfig.instagram],
-          }}
+        {/* Organization / WebSite 结构化数据放head：AI 引擎优先读 head 里的实体声明 */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
         />
-        <AuthProvider user={session ? { id: session.id, name: session.name, email: session.email, role: session.role } : null}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd(loc)) }}
+        />
+        {/* Google Analytics：后台 SEO 设置填 GA ID 即生效 */}
+        {gaId && (
+          <>
+            <script
+              async
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+            />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config',${JSON.stringify(gaId)});`,
+              }}
+            />
+          </>
+        )}
+      </head>
+      <body className="grain">
+        <a href="#main" className="skip-link">
+          {dict.common.skipToContent}
+        </a>
+        <AuthProvider
+          user={
+            session
+              ? { id: session.id, name: session.name, email: session.email, role: session.role }
+              : null
+          }
+        >
           <LocaleProvider locale={loc} dict={dict}>
-            <AnnouncementBar />
-            <SiteHeader />
-            <main className="min-h-screen">{children}</main>
-            <SiteFooter />
+            <SiteChrome>
+              <SiteHeader />
+            </SiteChrome>
+            <main id="main" className="min-h-screen">{children}</main>
+            <SiteChrome>
+              <SiteFooter />
+            </SiteChrome>
           </LocaleProvider>
         </AuthProvider>
       </body>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale } from '@/components/i18n/locale-provider';
 
 export function ReviewForm({ slug }: { slug: string }) {
-  const { locale } = useLocale();
+  const { locale, dict } = useLocale();
   const router = useRouter();
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState('');
@@ -34,14 +34,14 @@ export function ReviewForm({ slug }: { slug: string }) {
       setContent('');
       setTimeout(() => router.refresh(), 600);
     } else {
-      setErr('submit failed');
+      setErr(dict.product.reviewFailed);
     }
   }
 
   if (done) {
     return (
       <p className="text-sm text-accent border border-accent px-4 py-3">
-        {locale === 'ko' ? '리뷰가 등록되었습니다.' : 'Review submitted. Thank you!'}
+        {dict.product.reviewSubmitted}
       </p>
     );
   }
@@ -64,19 +64,19 @@ export function ReviewForm({ slug }: { slug: string }) {
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder={locale === 'ko' ? '제목' : 'Title'}
+        placeholder={dict.product.reviewTitlePh}
         className="w-full border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
       />
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
         rows={3}
-        placeholder={locale === 'ko' ? '후기 내용' : 'Your review'}
+        placeholder={dict.product.reviewContentPh}
         className="w-full border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
       />
       {err && <p className="text-sm text-red-600">{err}</p>}
       <button type="submit" disabled={busy} className="btn-gold text-sm">
-        {busy ? '…' : locale === 'ko' ? '리뷰 등록' : 'Submit Review'}
+        {busy ? '…' : dict.product.submitReview}
       </button>
     </form>
   );

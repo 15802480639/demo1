@@ -21,7 +21,7 @@ export async function generateMetadata({
   const loc = (isLocale(locale) ? locale : 'ko') as Locale;
   const dict = getDictionary(loc);
   const titleFn = TITLES[slug];
-  if (!titleFn) return { title: 'Not found' };
+  if (!titleFn) return { title: dict.common.notFound };
   return { title: titleFn(dict), alternates: { canonical: `/${loc}/info/${slug}` } };
 }
 
@@ -37,10 +37,7 @@ export default async function InfoPage({
   const titleFn = TITLES[slug];
   if (!titleFn) notFound();
 
-  const paragraphs = [
-    dict.home.seoBody,
-    '본 페이지는 데모 콘텐츠입니다. 실제 운영 전 법무 검토를 거친 정식 약관으로 교체해 주세요.',
-  ];
+  const paragraphs = [dict.home.seoBody, dict.info.demoNotice];
 
   return (
     <div className="mx-auto max-w-[800px] px-4 sm:px-8 py-14">

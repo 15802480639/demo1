@@ -9,7 +9,10 @@ export interface CartLine {
   brandCode: string;
   price: number; // 韩元 ₩
   image?: string;
+  /** 规格摘要（展示用，如「颜色:红色 / 尺码:M」），同时作为同商品不同规格的唯一键 */
   size?: string;
+  /** 选中的规格组合原值：{ "색상": "레드", "사이즈": "M" } */
+  options?: Record<string, string>;
   qty: number;
 }
 

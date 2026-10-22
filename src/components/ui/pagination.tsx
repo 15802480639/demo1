@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useLocale } from '@/components/i18n/locale-provider';
 
 export function Pagination({
   page,
@@ -11,10 +12,11 @@ export function Pagination({
   totalPages: number;
   buildHref: (p: number) => string;
 }) {
+  const { dict } = useLocale();
   if (totalPages <= 1) return null;
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
   return (
-    <nav className="flex items-center justify-center gap-2 mt-12" aria-label="pagination">
+    <nav className="flex items-center justify-center gap-2 mt-12" aria-label={dict.common.pagination}>
       {page > 1 && (
         <Link
           href={buildHref(page - 1)}

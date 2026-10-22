@@ -35,7 +35,18 @@ export async function POST(req: Request) {
       price: Number(body.price),
       compareAtPrice: body.compareAtPrice ? Number(body.compareAtPrice) : undefined,
     });
-    return NextResponse.json({ ok: true, product });
+
+    // 新商品上线 → 立即推送 IndexNow，让 Bing 系（含 ChatGPT 检索）尽快重抓。
+    // 🔴 必须静默：推送失败绝不能影响建品流程（记忆库 §3.5）
+    let indexnow: { ok: boolean; error?: string } | null = null;
+    try {
+      const { pushPaths } = await import('@/lib/indexnow');
+      indexnow = await pushPaths([`/products/${product.slug}`]);
+    } catch (e) {
+      indexnow = { ok: false, error: e instanceof Error ? e.message : 'push failed' };
+    }
+
+    return NextResponse.json({ ok: true, product, indexnow });
   } catch (e) {
     console.error('create product error', e);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

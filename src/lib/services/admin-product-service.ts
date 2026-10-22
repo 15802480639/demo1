@@ -4,14 +4,24 @@ export type AdminSkuInput = {
   id?: string;
   size?: string;
   color?: string;
+  /** 动态规格组合：{ "색상": "레드", "사이즈": "M" } —— 多规格时用这个 */
+  options?: Record<string, string>;
   stock: number;
   price?: number;
 };
 
+export type AdminSpecInput = {
+  name: string; // 规格名（韩语/默认）
+  nameZh?: string; // 规格名（中文）
+  values: { ko: string; zh?: string }[];
+};
+
 export type ProductInput = {
   name: string;
+  nameZh?: string;
   code?: string;
   description?: string;
+  descriptionZh?: string;
   gender?: string;
   brandId?: string;
   categoryId: string;
@@ -21,6 +31,7 @@ export type ProductInput = {
   status?: string;
   images?: string[];
   skus?: AdminSkuInput[];
+  specs?: AdminSpecInput[];
 };
 
 function slugBase(input: string): string {
@@ -41,23 +52,35 @@ async function uniqueSlug(base: string): Promise<string> {
   return `${root}-${Date.now().toString(36)}`;
 }
 
-function skuCodeFor(code: string | undefined, s: AdminSkuInput): string {
+function skuCodeFor(code: string | undefined, s: AdminSkuInput, idx = 0): string {
   const base = (code || 'SKU').toUpperCase().replace(/[^A-Z0-9]+/g, '-');
-  const variant = (s.size || s.color || Math.random().toString(36).slice(2, 5)).toUpperCase();
-  return `${base}-${variant}`;
+  const o = optionsFor(s);
+  const variant =
+    Object.values(o)
+      .filter(Boolean)
+      .join('-')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '') || `V${idx + 1}`;
+  return `${base}-${variant || Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
-function optionsFor(s: AdminSkuInput) {
+function optionsFor(s: AdminSkuInput): Record<string, string> {
   const o: Record<string, string> = {};
-  if (s.color) o.Color = s.color;
-  if (s.size) o.Size = s.size;
-  if (!s.color && !s.size) o.Option = 'Default';
+  // 多规格：直接透传后台传来的组合
+  if (s.options && Object.keys(s.options).length > 0) {
+    for (const [k, v] of Object.entries(s.options)) {
+      if (k && v) o[k] = v;
+    }
+  }
+  if (!o.Color && s.color) o.Color = s.color;
+  if (!o.Size && s.size) o.Size = s.size;
+  if (Object.keys(o).length === 0) o.Option = 'Default';
   return o;
 }
 
 export async function getAdminProducts() {
   return prisma.product.findMany({
-    include: { brand: true, category: true, skus: true },
+    include: { brand: true, category: true, skus: true, specs: { orderBy: { order: 'asc' } } },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -65,7 +88,7 @@ export async function getAdminProducts() {
 export async function getAdminProduct(id: string) {
   return prisma.product.findUnique({
     where: { id },
-    include: { brand: true, category: true, skus: true },
+    include: { brand: true, category: true, skus: true, specs: { orderBy: { order: 'asc' } } },
   });
 }
 
@@ -79,18 +102,28 @@ export async function getCategories() {
 
 export async function createProduct(data: ProductInput) {
   const slug = await uniqueSlug(slugBase(data.code || data.name));
-  const skus = (data.skus ?? []).map((s) => ({
-    skuCode: skuCodeFor(data.code, s),
+  const skus = (data.skus ?? []).map((s, i) => ({
+    skuCode: `${skuCodeFor(data.code, s, i)}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
     options: JSON.stringify(optionsFor(s)),
     stock: s.stock ?? 0,
     price: s.price ?? null,
   }));
+  const specs = (data.specs ?? [])
+    .filter((sp) => sp.name && sp.values?.length)
+    .map((sp, i) => ({
+      name: sp.name,
+      nameZh: sp.nameZh || null,
+      values: JSON.stringify(sp.values),
+      order: i,
+    }));
   return prisma.product.create({
     data: {
       slug,
       name: data.name,
+      nameZh: data.nameZh || null,
       code: data.code || null,
       description: data.description || null,
+      descriptionZh: data.descriptionZh || null,
       gender: data.gender || null,
       brandId: data.brandId || null,
       categoryId: data.categoryId,
@@ -100,8 +133,9 @@ export async function createProduct(data: ProductInput) {
       status: data.status || 'draft',
       images: JSON.stringify(data.images ?? []),
       skus: { create: skus },
+      specs: { create: specs },
     },
-    include: { skus: true },
+    include: { skus: true, specs: { orderBy: { order: 'asc' } } },
   });
 }
 
@@ -111,9 +145,9 @@ export async function updateProduct(id: string, data: ProductInput) {
   const incoming = data.skus ?? [];
   const incomingIds = new Set(incoming.filter((s) => s.id).map((s) => s.id!));
 
-  for (const s of incoming) {
+  for (const [i, s] of incoming.entries()) {
     const payload = {
-      skuCode: skuCodeFor(data.code, s),
+      skuCode: s.id ? skuCodeFor(data.code, s, i) : `${skuCodeFor(data.code, s, i)}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
       options: JSON.stringify(optionsFor(s)),
       stock: s.stock ?? 0,
       price: s.price ?? null,
@@ -131,12 +165,29 @@ export async function updateProduct(id: string, data: ProductInput) {
     }
   }
 
+  // 规格组：整体重建（组的增删改排序变化都能覆盖）
+  if (data.specs) {
+    await prisma.productSpec.deleteMany({ where: { productId: id } });
+    const specs = data.specs
+      .filter((sp) => sp.name && sp.values?.length)
+      .map((sp, i) => ({
+        productId: id,
+        name: sp.name,
+        nameZh: sp.nameZh || null,
+        values: JSON.stringify(sp.values),
+        order: i,
+      }));
+    if (specs.length) await prisma.productSpec.createMany({ data: specs });
+  }
+
   return prisma.product.update({
     where: { id },
     data: {
       name: data.name,
+      nameZh: data.nameZh || null,
       code: data.code || null,
       description: data.description || null,
+      descriptionZh: data.descriptionZh || null,
       gender: data.gender || null,
       brandId: data.brandId || null,
       categoryId: data.categoryId,
@@ -146,7 +197,7 @@ export async function updateProduct(id: string, data: ProductInput) {
       status: data.status || 'draft',
       images: JSON.stringify(data.images ?? []),
     },
-    include: { skus: true },
+    include: { skus: true, specs: { orderBy: { order: 'asc' } } },
   });
 }
 

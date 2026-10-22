@@ -5,21 +5,25 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from '@/components/i18n/locale-provider';
 
-const ERR: Record<string, { ko: string; zh: string; en: string }> = {
-  invalid_email: { ko: '이메일 형식이 올바르지 않습니다', zh: '邮箱格式不正确', en: 'Invalid email format' },
-  password_too_short: { ko: '비밀번호는 6자 이상이어야 합니다', zh: '密码至少 6 位', en: 'Password must be at least 6 characters' },
-  email_taken: { ko: '이미 가입된 이메일입니다', zh: '该邮箱已注册', en: 'Email already registered' },
-  server_error: { ko: '서버 오류가 발생했습니다', zh: '服务器错误', en: 'Server error' },
-};
-
 export function RegisterForm({ redirectTo }: { redirectTo: string }) {
   const { locale, dict } = useLocale();
   const router = useRouter();
-  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const errMsg = (code: string) => {
+    const map: Record<string, string> = {
+      invalid_username: dict.auth.errInvalidUsername,
+      username_taken: dict.auth.errUsernameTaken,
+      invalid_email: dict.auth.errInvalidEmail,
+      email_taken: dict.auth.errEmailTaken,
+      password_too_short: dict.auth.errPasswordShort,
+    };
+    return map[code] ?? dict.auth.errServerError;
+  };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,54 +33,63 @@ export function RegisterForm({ redirectTo }: { redirectTo: string }) {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ username, email, password }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(ERR[data.error]?.[locale] ?? ERR.server_error[locale]);
+        setErr(errMsg(data.error));
         return;
       }
       router.push(redirectTo);
       router.refresh();
     } catch {
-      setErr(ERR.server_error[locale]);
+      setErr(dict.auth.errServerError);
     } finally {
       setLoading(false);
     }
   }
 
+  const input =
+    'w-full border border-line bg-surface px-4 py-3 outline-none focus:border-accent transition-colors mt-1';
+
   return (
     <form onSubmit={submit} className="space-y-4">
       <div>
         <label className="text-xs tracking-widest text-muted">
-          {dict.nav.account}
+          {dict.auth.usernameLabel}
         </label>
         <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full border border-line bg-surface px-4 py-3 outline-none focus:border-accent transition-colors mt-1"
-        />
-      </div>
-      <div>
-        <label className="text-xs tracking-widest text-muted">Email</label>
-        <input
-          type="email"
           required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border border-line bg-surface px-4 py-3 outline-none focus:border-accent transition-colors mt-1"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          className={input}
+          placeholder={dict.auth.usernamePh}
         />
       </div>
       <div>
         <label className="text-xs tracking-widest text-muted">
-          {dict.common.options}
+          {dict.account.password}
         </label>
         <input
           type="password"
           required
+          minLength={6}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full border border-line bg-surface px-4 py-3 outline-none focus:border-accent transition-colors mt-1"
+          className={input}
+          placeholder={dict.auth.passwordPh}
+        />
+      </div>
+      <div>
+        <label className="text-xs tracking-widest text-muted">
+          {dict.account.email}（{dict.auth.emailOptionalPh}）
+        </label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className={input}
+          placeholder={dict.auth.emailHint}
         />
       </div>
       {err && <p className="text-sm text-red-600">{err}</p>}

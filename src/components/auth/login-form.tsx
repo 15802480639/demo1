@@ -1,16 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from '@/components/i18n/locale-provider';
-
-const ERR: Record<string, { ko: string; zh: string; en: string }> = {
-  invalid_credentials: { ko: '이메일 또는 비밀번호가 올바르지 않습니다', zh: '邮箱或密码错误', en: 'Invalid email or password' },
-  missing_fields: { ko: '모든 항목을 입력하세요', zh: '请填写所有字段', en: 'Please fill all fields' },
-  server_error: { ko: '서버 오류가 발생했습니다', zh: '服务器错误', en: 'Server error' },
-  not_admin: { ko: '관리자 권한이 필요합니다', zh: '需要管理员权限', en: 'Admin access required' },
-};
 
 export function LoginForm({
   redirectTo,
@@ -20,11 +12,19 @@ export function LoginForm({
   requireAdmin?: boolean;
 }) {
   const { locale, dict } = useLocale();
-  const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const errMsg = (code: string) => {
+    const map: Record<string, string> = {
+      invalid_credentials: dict.auth.errInvalidCredentials,
+      missing_fields: dict.auth.errMissingFields,
+      not_admin: dict.auth.errNotAdmin,
+    };
+    return map[code] ?? dict.auth.errServerError;
+  };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,21 +34,23 @@ export function LoginForm({
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ account, password }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(ERR[data.error]?.[locale] ?? ERR.server_error[locale]);
+        setErr(errMsg(data.error));
         return;
       }
       if (requireAdmin && data.user.role !== 'admin') {
-        setErr(ERR.not_admin[locale]);
+        setErr(errMsg('not_admin'));
         return;
       }
-      router.push(redirectTo);
-      router.refresh();
+      // 🔴 必须整页跳转：router.push+refresh 存在竞态，
+      // 会复用缓存里 session=null 的 layout，导致 header 仍显示「注册/登录」。
+      // 硬导航强制 SSR 重新读 cookie，header/账户页必然一致。
+      window.location.assign(redirectTo);
     } catch {
-      setErr(ERR.server_error[locale]);
+      setErr(dict.auth.errServerError);
     } finally {
       setLoading(false);
     }
@@ -57,18 +59,20 @@ export function LoginForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div>
-        <label className="text-xs tracking-widest text-muted">Email</label>
+        <label className="text-xs tracking-widest text-muted">
+          {dict.auth.accountLabel}
+        </label>
         <input
-          type="email"
           required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          value={account}
+          onChange={(e) => setAccount(e.target.value)}
           className="w-full border border-line bg-surface px-4 py-3 outline-none focus:border-accent transition-colors mt-1"
+          placeholder={dict.auth.accountPh}
         />
       </div>
       <div>
         <label className="text-xs tracking-widest text-muted">
-          {dict.common.options}
+          {dict.account.password}
         </label>
         <input
           type="password"

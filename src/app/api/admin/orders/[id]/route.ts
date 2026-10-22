@@ -24,6 +24,11 @@ export async function PATCH(
     }
     if (body.trackingNo !== undefined) patch.trackingNo = body.trackingNo || null;
     if (body.carrier !== undefined) patch.carrier = body.carrier || null;
+    // 是否已联系（客服跟进标记）
+    if (typeof body.contacted === 'boolean') {
+      patch.contacted = body.contacted;
+      patch.contactedAt = body.contacted ? new Date() : null;
+    }
 
     // 物流信息同步到 Shipment
     if (body.trackingNo !== undefined || body.carrier !== undefined) {

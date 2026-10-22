@@ -11,7 +11,7 @@ export function WishlistButton({
   slug: string;
   className?: string;
 }) {
-  const { locale } = useLocale();
+  const { locale, dict } = useLocale();
   const router = useRouter();
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -45,7 +45,7 @@ export function WishlistButton({
   return (
     <button
       onClick={toggle}
-      aria-label="wishlist"
+      aria-label={dict.nav.wishlist}
       className={`${className} transition-colors ${on ? 'text-red-500' : 'text-ink-soft hover:text-red-500'}`}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'}>
