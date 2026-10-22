@@ -51,14 +51,32 @@ export async function getSession(): Promise<SessionUser | null> {
   return verifySessionToken(token);
 }
 
-export function sessionCookieOpts() {
+export function sessionCookieOpts(secure?: boolean) {
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
     path: '/',
     maxAge: MAX_AGE,
-    secure: process.env.NODE_ENV === 'production',
+    // ⚠️ 关键：Secure 跟随真实访问协议，不能无脑 production 就开。
+    // 当前站点用 IP 直连（http://8.217.66.83）尚未上 HTTPS，
+    // 若在这里强制 secure=true，浏览器会在 http 上下文拒绝保存该 cookie，
+    // 登录接口返回 ok 但 session 存不进去 → 一进后台就被踢回登录页。
+    // 正确做法：nginx 已传 X-Forwarded-Proto，https 才带 Secure，http 不带。
+    secure: secure ?? process.env.NODE_ENV === 'production',
   };
+}
+
+/** 从请求里判断客户端到底用 https 还是 http 访问（跟 nginx 的 X-Forwarded-Proto 对齐） */
+export function isSecureRequest(req: Request): boolean {
+  const proto = req.headers.get('x-forwarded-proto');
+  if (proto) return proto.split(',')[0].trim() === 'https';
+  // 兜底：直连（没走 nginx）时看 URL 协议
+  try {
+    const url = new URL(req.url);
+    return url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export async function hashPassword(pw: string): Promise<string> {

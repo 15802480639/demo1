@@ -3,6 +3,7 @@ import {
   prisma,
   createSessionToken,
   sessionCookieOpts,
+  isSecureRequest,
   SESSION_COOKIE,
   hashPassword,
   type SessionUser,
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
     };
     const token = createSessionToken(sessionUser);
     const res = NextResponse.json({ ok: true, user: sessionUser });
-    res.cookies.set(SESSION_COOKIE, token, sessionCookieOpts());
+    res.cookies.set(SESSION_COOKIE, token, sessionCookieOpts(isSecureRequest(req)));
     return res;
   } catch (e) {
     console.error('register error', e);
