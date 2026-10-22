@@ -195,9 +195,19 @@ fi
 
 # ---------- 5. 依赖 ----------
 log "5/8 安装依赖"
-npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+# ⚠️ 2Mbps 带宽 + 1.7G 内存的机器上，直连官方源会长时间打满 CPU/网络导致 sshd 无响应。
+# 三重保险：镜像源加速 + 限并发降内存 + nice 降优先级（保证 sshd 始终能抢到 CPU）
+NPM_MIRROR="https://registry.npmmirror.com"
+install_deps() {
+  nice -n 19 npm "$@" --omit=dev --no-audit --no-fund --maxsockets 2
+}
+install_deps ci --registry="$NPM_MIRROR" \
+  || install_deps ci \
+  || (nice -n 19 npm install --omit=dev --no-audit --no-fund --maxsockets 2) \
+  || die "依赖安装失败"
 # prisma CLI 是 devDependency，但 migrate deploy 需要它 → 单独装
-npm install --no-save prisma@7.9.1 @prisma/client@7.9.1 @prisma/adapter-pg@7.9.1 tsx 2>/dev/null || true
+nice -n 19 npm install --no-save prisma@7.9.1 @prisma/client@7.9.1 @prisma/adapter-pg@7.9.1 tsx \
+  --no-audit --no-fund --maxsockets 2 2>/dev/null || warn "prisma CLI 补装失败（若迁移报错请手动处理）"
 ok "依赖就绪"
 
 # ---------- 6. 环境变量 ----------
