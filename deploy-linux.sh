@@ -145,6 +145,14 @@ if ! command -v psql >/dev/null 2>&1; then
       fi
     fi
     systemctl enable --now postgresql
+    # RHEL/ALOS 系 PG 默认 host 127.0.0.1/32 走 ident 认证，
+    # 应用经 TCP+密码连接会被拒（Prisma 报 P1010 denied access）→ 改 scram-sha-256
+    PG_HBA="/var/lib/pgsql/data/pg_hba.conf"
+    if grep -qE '^host\s+all\s+all\s+(127\.0\.0\.1/32|::1/128)\s+ident' "$PG_HBA" 2>/dev/null; then
+      sed -i -E 's#^(host\s+all\s+all\s+(127\.0\.0\.1/32|::1/128)\s+)ident#\1scram-sha-256#' "$PG_HBA"
+      systemctl reload postgresql
+      ok "pg_hba 已切换为密码认证（默认 ident 会导致应用连不上）"
+    fi
   else
     apt-get install -y -qq postgresql postgresql-contrib xz-utils
     systemctl enable --now postgresql
