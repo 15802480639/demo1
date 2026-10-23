@@ -163,14 +163,6 @@ export function SiteHeader() {
 
           {user ? (
             <>
-              {user.role === 'admin' && (
-                <Link
-                  href={`/${locale}/admin`}
-                  className="hidden sm:flex items-center px-2 text-xs tracking-wide text-accent hover:underline"
-                >
-                  ADMIN
-                </Link>
-              )}
               <Link
                 href={`/${locale}/account`}
                 aria-label={dict.nav.account}                className="p-2 hover:text-accent transition-colors hidden sm:block"
