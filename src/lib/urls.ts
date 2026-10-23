@@ -32,9 +32,35 @@ export const urlProducts = (
   return `${baseUrl()}/${locale}/products${s ? `?${s}` : ''}`;
 };
 
-/** 分类（用真实存在的查询参数，不臆造路由） */
+/** 分类（旧地址：查询参数形式，保留不失效） */
 export const urlCategory = (slug: string, locale: Locale = defaultLocale) =>
   urlProducts(locale, { cat: slug });
+
+/**
+ * 分类（新地址：独立路径，支持多级）
+ * 例：urlCategoryPath(['women','tops'], 'ko') → https://site/ko/c/women/tops
+ *
+ * ⚠️ 3 级分类用独立路径，SEO 权重集中在这里；
+ * 老的 ?cat= 地址保留（不删），由分类页做跳转/规范链接。
+ *
+ * ⚠️ slug 必须是**原始未编码**形式（如韩文「테스트-카테고리」）。
+ * Next.js 路由 params.path 传进来时已解码，若这里再 encodeURIComponent
+ * 会造成「生成链接的编码 ≠ 实际路由解码值」的错位（实测韩文 slug 404）。
+ * 浏览器/HTTP 会在发送时自动编码非 ASCII，所以直接拼接原始 slug 是正确做法。
+ */
+export const urlCategoryPath = (
+  path: string[],
+  locale: Locale = defaultLocale,
+) => {
+  const segs = path
+    .filter(Boolean)
+    .map((s) => encodeURI(decodeURIComponent(s)));
+  return `${baseUrl()}/${locale}/c/${segs.join('/')}`;
+};
+
+/** 分类页（旧参数地址 → 新路径地址），用于 canonical / 跳转 */
+export const urlCategoryLegacy = (slug: string, locale: Locale = defaultLocale) =>
+  urlCategory(slug, locale);
 
 /** 品牌 */
 export const urlBrand = (slug: string, locale: Locale = defaultLocale) =>

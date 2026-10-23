@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { isLocale, type Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 import { getProducts, countProducts, type ProductFilter } from '@/lib/services/product-service';
@@ -9,7 +9,8 @@ import { ProductListing } from '@/components/product/product-listing';
 import { siteConfig } from '@/lib/site';
 import { clampDesc, itemListJsonLd, collectionPageJsonLd, breadcrumbJsonLd } from '@/lib/seo';
 import { JsonLd } from '@/components/seo/json-ld';
-import { baseUrl, urlProducts, urlProduct } from '@/lib/urls';
+import { baseUrl, urlProducts, urlProduct, urlCategoryPath } from '@/lib/urls';
+import { getCategoryTree, flattenTree } from '@/lib/category-tree';
 
 export async function generateMetadata({
   params,
@@ -95,6 +96,33 @@ export default async function ProductsPage({
     ? sp.sort
     : 'new') as 'new' | 'priceAsc' | 'priceDesc';
   const page = Math.max(1, Number(sp.page) || 1);
+
+  // 3 级分类：老地址 /products?cat=xxx 301 到新路径 /c/xxx，
+  // 让 SEO 权重集中到独立路径，老链接不失效（不 404）。
+  if (category) {
+    const tree = await getCategoryTree();
+    // slug 可能来自 URL（已解码），做归一化匹配
+    let decoded = category;
+    try {
+      decoded = decodeURIComponent(category);
+    } catch {
+      /* 保持原值 */
+    }
+    const flat = flattenTree(tree);
+    const node =
+      flat.find((n) => n.slug === category) ??
+      flat.find((n) => n.slug === decoded);
+    if (node) {
+      // 若带其他筛选参数，保留在 query 里
+      const rest = new URLSearchParams();
+      for (const [k, v] of Object.entries(sp)) {
+        if (k === 'cat' || !v) continue;
+        rest.set(k, v);
+      }
+      const qs = rest.toString();
+      redirect(`${urlCategoryPath([node.slug], loc)}${qs ? `?${qs}` : ''}`);
+    }
+  }
 
   const filter: ProductFilter = { gender, category, sale, isNew, brand: brandSlug, sort };
   const [list, total, allBrands] = await Promise.all([

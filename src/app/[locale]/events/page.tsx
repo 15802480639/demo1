@@ -66,10 +66,10 @@ export default async function EventsPage({
       <SectionHeading title={dict.nav.events} center />
 
       {events.length === 0 ? (
-        <div className="bg-ink text-white rounded-card p-10 text-center">
-          <p className="tracking-luxe text-xs text-accent mb-4">{dict.events.liveBadge}</p>
-          <h2 className="font-display text-3xl sm:text-5xl">{dict.events.liveHeading}</h2>
-          <p className="mt-4 text-white/70 max-w-md mx-auto">{dict.events.liveBody}</p>
+        <div className="bg-sand border border-line rounded-card p-10 text-center">
+          <p className="tracking-luxe text-xs text-accent-strong mb-4">{dict.events.liveBadge}</p>
+          <h2 className="font-display text-3xl sm:text-5xl text-ink">{dict.events.liveHeading}</h2>
+          <p className="mt-4 text-ink-soft max-w-md mx-auto">{dict.events.liveBody}</p>
         </div>
       ) : (
         <div className="space-y-6">

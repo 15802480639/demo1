@@ -1,6 +1,7 @@
 import { siteConfig } from '@/lib/site';
 import { locales } from '@/i18n/config';
-import { baseUrl, urlProduct, urlCategory, urlProducts, isValidInternalUrl } from '@/lib/urls';
+import { baseUrl, urlProduct, urlCategoryPath, urlProducts, isValidInternalUrl } from '@/lib/urls';
+import { getCategoryTree, type CategoryNode } from '@/lib/category-tree';
 
 /**
  * llms-full.txt —— llms.txt 规范的「全量版」。
@@ -48,7 +49,8 @@ export async function GET(): Promise<Response> {
   const N = siteConfig.name;
   const defaultLoc = locales[0];
 
-  const [intro, products, categories, faqs, facts, productFaqs] = await Promise.all([
+  const [intro, products, categories, faqs, facts, productFaqs, catTree] =
+    await Promise.all([
     getLlmsIntro(),
     prisma.product.findMany({
       where: { status: 'active' },
@@ -77,6 +79,7 @@ export async function GET(): Promise<Response> {
       orderBy: [{ order: 'asc' }],
       take: 200,
     }),
+    getCategoryTree(),
   ]);
 
   const L: string[] = [];
@@ -112,14 +115,26 @@ export async function GET(): Promise<Response> {
   if (categories.length > 0) {
     L.push('## Categories');
     L.push('');
-    for (const c of categories) {
-      const href = urlCategory(c.slug, defaultLoc);
-      L.push(
-        isValidInternalUrl(href)
-          ? `- [${N} ${c.name}](${href}) — ${N} ${c.name} category.`
-          : `- ${N} ${c.name} — ${N} ${c.name} category.`
-      );
-    }
+    // 3 级层级输出：AI 能看懂分类树结构
+    const emit = (
+      nodes: CategoryNode[],
+      trail: string[],
+      trailNames: string[],
+    ) => {
+      for (const n of nodes) {
+        const path = [...trail, n.slug];
+        const names = [...trailNames, n.name];
+        const label = names.join(' > ');
+        const href = urlCategoryPath(path, defaultLoc);
+        L.push(
+          isValidInternalUrl(href)
+            ? `- [${N} ${label}](${href}) — ${N} ${label} category.`
+            : `- ${N} ${label} — ${N} ${label} category.`
+        );
+        if (n.children.length) emit(n.children, path, names);
+      }
+    };
+    emit(catTree, [], []);
     L.push('');
     L.push(`Full catalogue listing: ${urlProducts(defaultLoc)}`);
     L.push('');

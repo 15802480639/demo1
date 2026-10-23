@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCategoryTree } from '@/lib/category-tree';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,11 +12,8 @@ export const dynamic = 'force-dynamic';
  * 后台编辑区与 API 输出同步清理；存量 SiteSetting 数据保留不删。
  */
 export async function GET() {
-  const [categories, settings] = await Promise.all([
-    prisma.category.findMany({
-      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-      select: { slug: true, name: true, nameZh: true },
-    }),
+  const [tree, settings] = await Promise.all([
+    getCategoryTree(),
     prisma.siteSetting.findMany({
       where: {
         key: {
@@ -28,6 +26,35 @@ export async function GET() {
       },
     }),
   ]);
+  // 导航用扁平列表 + 层级标记（前端渲染下钻菜单更方便）
+  const flat: {
+    id: string;
+    slug: string;
+    name: string;
+    nameZh: string | null;
+    parentId: string | null;
+    depth: number;
+    childSlugs: string[];
+  }[] = [];
+  const walk = (
+    nodes: Awaited<ReturnType<typeof getCategoryTree>>,
+    depth: number,
+  ) => {
+    for (const n of nodes) {
+      flat.push({
+        id: n.id,
+        slug: n.slug,
+        name: n.name,
+        nameZh: n.nameZh,
+        parentId: n.parentId,
+        depth,
+        childSlugs: n.children.map((c) => c.slug),
+      });
+      walk(n.children, depth + 1);
+    }
+  };
+  walk(tree, 1);
+
   const homeSeo: Record<string, string> = {};
   let footer: unknown = null;
   for (const s of settings) {
@@ -41,5 +68,5 @@ export async function GET() {
       homeSeo[s.key] = s.value;
     }
   }
-  return NextResponse.json({ categories, footer, homeSeo });
+  return NextResponse.json({ categories: flat, footer, homeSeo });
 }

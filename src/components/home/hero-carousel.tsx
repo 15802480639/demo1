@@ -29,10 +29,55 @@ type Slide = {
 };
 
 const SLIDE_BG = [
-  'linear-gradient(115deg, #14110f 0%, #24352a 52%, #33452f 100%)',
-  'linear-gradient(115deg, #14110f 0%, #3a2f22 55%, #b0894f 130%)',
-  'linear-gradient(115deg, #101418 0%, #1d2b33 55%, #2f4a52 100%)',
+  // 兜底渐变（图片未配置 / 加载失败时用）—— 2026-10-23 改为浅色系，
+  // 原深色渐变是"整体沉重"的第二大来源。
+  'linear-gradient(115deg, #faf8f4 0%, #f0e9de 52%, #e6dccb 100%)',
+  'linear-gradient(115deg, #fbf8f3 0%, #f3ead9 55%, #e3d3c0 130%)',
+  'linear-gradient(115deg, #f7f7f6 0%, #eceef0 55%, #e2e6e8 100%)',
 ];
+
+/**
+ * 判断横幅图是「亮图」还是「暗图」，用于自适应文字颜色。
+ * 亮图 → 深色文字 + 极浅遮罩（保持画面通透）
+ * 暗图 → 白色文字 + 中等遮罩（保证可读）
+ *
+ * 用离屏 canvas 取样平均亮度；跨域/失败时保守回落为暗图。
+ */
+function detectTone(
+  url: string,
+  cb: (tone: 'light' | 'dark') => void,
+): void {
+  if (typeof window === 'undefined') return;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas');
+      const w = 32;
+      const h = 32;
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      if (!ctx) return cb('dark');
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        // 感知亮度（Rec.709）
+        sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        n++;
+      }
+      const avg = n ? sum / n : 0;
+      cb(avg > 150 ? 'light' : 'dark');
+    } catch {
+      // 跨域导致 canvas 被污染 → 回落暗图（安全侧）
+      cb('dark');
+    }
+  };
+  img.onerror = () => cb('dark');
+  img.src = url;
+}
 
 /** 按当前语种挑选字段：ko → zh → en 依次回落 */
 function pick(
@@ -61,6 +106,8 @@ export function HeroCarousel({
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);
+  /** 每屏图片的明暗：'light' = 亮图（用深色文字），'dark' = 暗图（用白色文字） */
+  const [tones, setTones] = useState<Record<number, 'light' | 'dark'>>({});
 
   // 后台配置优先；否则用字典文案 + 商品实拍图兜底
   const built: Slide[] = (banners && banners.length
@@ -100,14 +147,32 @@ export function HeroCarousel({
     return () => window.removeEventListener('keydown', onKey);
   }, [slides.length]);
 
+  // 检测每屏图片明暗 → 决定文字颜色与遮罩强度（亮图保持通透，暗图保证可读）
+  useEffect(() => {
+    let alive = true;
+    slides.forEach((s, i) => {
+      if (!s.image) return;
+      detectTone(s.image, (tone) => {
+        if (!alive) return;
+        setTones((prev) => (prev[i] === tone ? prev : { ...prev, [i]: tone }));
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [slides.map((s) => s.image).join('|')]);
+
   if (slides.length === 0) return null;
 
   const go = (n: number) => setIndex(((n % count) + count) % count);
   const current = slides[index];
+  const tone = tones[index] ?? 'dark';
+  const isLight = tone === 'light';
 
   return (
     <section
-      className="relative w-full overflow-hidden bg-[#14110f] text-white"
+      // 容器底色改浅米白：图片未加载时不再是一块黑
+      className="relative w-full overflow-hidden bg-bg"
       style={{ height: '100svh', minHeight: 560 }}
       aria-roledescription="carousel"
       onMouseEnter={() => setPaused(true)}
@@ -123,7 +188,9 @@ export function HeroCarousel({
       }}
     >
       {/* ---------- 背景层 ---------- */}
-      {slides.map((s, i) => (
+      {slides.map((s, i) => {
+        const slideLight = (tones[i] ?? 'dark') === 'light';
+        return (
         <div
           key={i}
           className={`absolute inset-0 transition-opacity duration-[1200ms] ease-out ${
@@ -149,28 +216,48 @@ export function HeroCarousel({
                 : undefined
             }
           />
-          {/* 可读性遮罩：整体压暗 + 左侧压暗 + 底部渐深 */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(12,10,9,0.58),rgba(12,10,9,0.18)_40%,rgba(12,10,9,0.74))]" />
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(12,10,9,0.66),rgba(12,10,9,0.04)_64%)]" />
+          {/* 可读性遮罩（2026-10-23 提亮）：
+              亮图 → 极浅的暖白渐变，保持画面通透，文字用深色
+              暗图 → 中等暗色渐变，保证白字可读 */}
+          {slideLight ? (
+            <>
+              <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,253,249,0.30),rgba(255,253,249,0.10)_40%,rgba(255,253,249,0.52))]" />
+              <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,253,249,0.42),rgba(255,253,249,0.02)_64%)]" />
+            </>
+          ) : (
+            <>
+              <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(20,17,15,0.42),rgba(20,17,15,0.12)_40%,rgba(20,17,15,0.55))]" />
+              <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(20,17,15,0.52),rgba(20,17,15,0.03)_64%)]" />
+            </>
+          )}
         </div>
-      ))}
+        );
+      })}
 
       {/* ---------- 文案层（只渲染当前屏，保证每次切换都有入场动画） ---------- */}
       <div className="absolute inset-0 flex items-end sm:items-center">
         <div className="mx-auto w-full max-w-[1400px] px-6 sm:px-12 pb-32 sm:pb-0">
           <div key={index} className="max-w-3xl">
             <p
-              className="hero-line tracking-luxe text-[11px] sm:text-xs text-accent mb-5 sm:mb-6"
+              className={`hero-line tracking-luxe text-[11px] sm:text-xs mb-5 sm:mb-6 ${
+                isLight ? 'text-accent-strong' : 'text-accent'
+              }`}
               style={{ animationDelay: '60ms' }}
             >
               {current.eyebrow || dict.home.heroEyebrow}
             </p>
-            <h1 className="hero-line font-display text-[2.6rem] leading-[1.03] sm:text-6xl lg:text-[5.25rem] tracking-tight text-balance">
+            <h1
+              className={`hero-line font-display text-[2.6rem] leading-[1.03] sm:text-6xl lg:text-[5.25rem] tracking-tight text-balance ${
+                isLight ? 'text-ink' : 'text-white'
+              }`}
+            >
               {current.title}
             </h1>
             {current.subtitle && (
               <p
-                className="hero-line mt-5 sm:mt-6 text-base sm:text-xl text-white/85 font-light max-w-xl"
+                className={`hero-line mt-5 sm:mt-6 text-base sm:text-xl font-light max-w-xl ${
+                  isLight ? 'text-ink-soft' : 'text-white/85'
+                }`}
                 style={{ animationDelay: '240ms' }}
               >
                 {current.subtitle}
@@ -192,7 +279,11 @@ export function HeroCarousel({
               </Link>
               <Link
                 href={`/${locale}/products?sale=1`}
-                className="btn-outline border-white/70 text-white px-7 py-4 sm:px-9 hover:bg-white hover:text-ink hover:border-white"
+                className={
+                  isLight
+                    ? 'btn-outline border-ink/40 text-ink px-7 py-4 sm:px-9 hover:bg-ink hover:text-white hover:border-ink'
+                    : 'btn-outline border-white/70 text-white px-7 py-4 sm:px-9 hover:bg-white hover:text-ink hover:border-white'
+                }
               >
                 {dict.nav.sale}
               </Link>
@@ -213,7 +304,11 @@ export function HeroCarousel({
                   aria-label={dict.common.goToSlide.replace('{n}', String(i + 1))}
                   className="py-3 px-1 -mx-1"
                 >
-                  <span className="block h-[2px] w-9 sm:w-14 bg-white/30 overflow-hidden">
+                  <span
+                    className={`block h-[2px] w-9 sm:w-14 overflow-hidden ${
+                      isLight ? 'bg-ink/20' : 'bg-white/30'
+                    }`}
+                  >
                     <span
                       key={i === index ? `active-${index}` : `idle-${i}`}
                       className="block h-full w-full origin-left"
@@ -234,11 +329,21 @@ export function HeroCarousel({
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            <span className="font-display text-2xl sm:text-3xl tabular-nums">
+            <span
+              className={`font-display text-2xl sm:text-3xl tabular-nums ${
+                isLight ? 'text-ink' : 'text-white'
+              }`}
+            >
               {String(index + 1).padStart(2, '0')}
             </span>
-            <span className="h-px w-7 sm:w-8 bg-white/40" />
-            <span className="font-display text-2xl sm:text-3xl text-white/50 tabular-nums">
+            <span
+              className={`h-px w-7 sm:w-8 ${isLight ? 'bg-ink/30' : 'bg-white/40'}`}
+            />
+            <span
+              className={`font-display text-2xl sm:text-3xl tabular-nums ${
+                isLight ? 'text-ink/50' : 'text-white/50'
+              }`}
+            >
               {String(count).padStart(2, '0')}
             </span>
           </div>
@@ -251,14 +356,18 @@ export function HeroCarousel({
           <button
             aria-label={dict.common.previousSlide}
             onClick={() => go(index - 1)}
-            className="hidden sm:flex absolute left-6 sm:left-12 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full border border-white/35 items-center justify-center text-2xl leading-none hover:border-accent hover:text-accent transition-colors"
+            className={`hidden sm:flex absolute left-6 sm:left-12 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full border items-center justify-center text-2xl leading-none hover:border-accent hover:text-accent transition-colors ${
+              isLight ? 'border-ink/25 text-ink' : 'border-white/35 text-white'
+            }`}
           >
             ‹
           </button>
           <button
             aria-label={dict.common.nextSlide}
             onClick={() => go(index + 1)}
-            className="hidden sm:flex absolute right-6 sm:right-12 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full border border-white/35 items-center justify-center text-2xl leading-none hover:border-accent hover:text-accent transition-colors"
+            className={`hidden sm:flex absolute right-6 sm:right-12 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full border items-center justify-center text-2xl leading-none hover:border-accent hover:text-accent transition-colors ${
+              isLight ? 'border-ink/25 text-ink' : 'border-white/35 text-white'
+            }`}
           >
             ›
           </button>

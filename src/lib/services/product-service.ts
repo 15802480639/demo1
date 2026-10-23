@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getCategoryScopeSlugs } from '@/lib/category-tree';
 import type { Badge, Gender, Product, ProductDetail } from '@/lib/types';
 
 export interface ProductFilter {
@@ -65,10 +66,20 @@ export function toView(p: ProductRow): Product {
   };
 }
 
-function buildWhere(f: ProductFilter): Record<string, unknown> {
+async function buildWhere(f: ProductFilter): Promise<Record<string, unknown>> {
   const where: Record<string, unknown> = { status: 'active' };
   if (f.gender) where.gender = f.gender;
-  if (f.category) where.category = { slug: f.category };
+  if (f.category) {
+    // 3 级分类：传入一级分类时，要同时包含其下所有子分类的商品。
+    // 例：点「女装」应能同时看到「女装 → 上衣 → 棉质T恤」下的商品。
+    const slugs = await getCategoryScopeSlugs(f.category);
+    if (slugs && slugs.length) {
+      where.category = { slug: { in: slugs } };
+    } else {
+      // 分类不存在 → 返回空结果，而不是退化成「不限分类」把全部商品都列出来
+      where.category = { slug: '__no_such_category__' };
+    }
+  }
   if (f.sale) where.compareAtPrice = { not: null };
   if (f.brand) where.brand = { slug: f.brand };
   if (f.featured) where.featured = true;
@@ -84,7 +95,7 @@ function buildWhere(f: ProductFilter): Record<string, unknown> {
 }
 
 export async function getProducts(f: ProductFilter = {}): Promise<Product[]> {
-  const where = buildWhere(f);
+  const where = await buildWhere(f);
   let rows = await prisma.product.findMany({
     where,
     include: { brand: true, category: true },
@@ -106,7 +117,7 @@ export async function getProducts(f: ProductFilter = {}): Promise<Product[]> {
 }
 
 export async function countProducts(f: ProductFilter = {}): Promise<number> {
-  const where = buildWhere(f);
+  const where = await buildWhere(f);
   let rows = await prisma.product.findMany({ where, select: { tags: true } });
   if (f.isNew) {
     rows = rows.filter((r) =>

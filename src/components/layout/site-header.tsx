@@ -9,7 +9,15 @@ import { useCart, cartCount } from '@/lib/cart-store';
 import { locales, localeNames, type Locale } from '@/i18n/config';
 import { siteConfig } from '@/lib/site';
 
-type NavCategory = { slug: string; name: string; nameZh: string | null };
+type NavCategory = {
+  id: string;
+  slug: string;
+  name: string;
+  nameZh: string | null;
+  parentId: string | null;
+  depth: number;
+  childSlugs: string[];
+};
 
 export function SiteHeader() {
   const { locale, dict } = useLocale();
@@ -36,11 +44,20 @@ export function SiteHeader() {
     };
   }, []);
 
+  // 分类导航：一级分类进 nav，二级分类作为其下拉子项
+  const topCategories = navCategories.filter((c) => c.depth === 1);
+  const subOf = (parentId: string) =>
+    navCategories.filter((c) => c.parentId === parentId && c.depth === 2);
+
   const nav = [
     { label: dict.nav.shop, href: `/${locale}/products` },
-    ...navCategories.map((c) => ({
+    ...topCategories.map((c) => ({
       label: locale === 'zh' ? c.nameZh || c.name : c.name,
-      href: `/${locale}/products?cat=${encodeURIComponent(c.slug)}`,
+      href: `/${locale}/c/${encodeURIComponent(c.slug)}`,
+      children: subOf(c.id).map((s) => ({
+        label: locale === 'zh' ? s.nameZh || s.name : s.name,
+        href: `/${locale}/c/${encodeURIComponent(c.slug)}/${encodeURIComponent(s.slug)}`,
+      })),
     })),
     { label: dict.nav.women, href: `/${locale}/products?gender=women` },
     { label: dict.nav.men, href: `/${locale}/products?gender=men` },
@@ -99,22 +116,47 @@ export function SiteHeader() {
           <div className="flex items-center gap-5 whitespace-nowrap px-2">
           {nav.map((item) => {
             const isActive = pathname === item.href.split('?')[0];
+            const children = 'children' in item ? item.children : undefined;
             return (
-              <Link
+              <div
                 key={item.label}
-                href={item.href}
-                aria-current={isActive ? 'page' : undefined}
-                className={`text-sm tracking-wide transition-colors relative group ${
+                className={`relative group text-sm tracking-wide transition-colors ${
                   isActive ? 'text-ink' : 'text-ink-soft hover:text-ink'
                 }`}
               >
-                {item.label}
-                <span
-                  className={`absolute -bottom-1 left-0 h-px bg-accent transition-all duration-300 ${
-                    isActive ? 'w-full' : 'w-0 group-hover:w-full'
-                  }`}
-                />
-              </Link>
+                <Link
+                  href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className="block"
+                >
+                  {item.label}
+                  <span
+                    className={`absolute -bottom-1 left-0 h-px bg-accent transition-all duration-300 ${
+                      isActive ? 'w-full' : 'w-0 group-hover:w-full'
+                    }`}
+                  />
+                </Link>
+                {/* 二级分类下拉：hover 展开 */}
+                {children && children.length > 0 && (
+                  <div
+                    className="absolute left-0 top-full hidden group-hover:block pt-3"
+                    role="menu"
+                  >
+                    <div className="bg-surface border border-line shadow-card py-2 min-w-[200px]">
+                      {children.map((c) => (
+                        <Link
+                          key={c.href}
+                          href={c.href}
+                          role="menuitem"
+                          className="block px-4 py-2 text-sm text-ink-soft hover:text-accent hover:bg-surface-2 transition-colors whitespace-nowrap"
+                        >
+                          {c.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
           </div>
@@ -227,16 +269,34 @@ export function SiteHeader() {
       {menuOpen && (
         <nav className="lg:hidden border-t border-line bg-surface">
           <div className="px-4 py-3 flex flex-col">
-            {nav.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={() => setMenuOpen(false)}
-                className="py-3 text-ink-soft border-b border-line last:border-0"
-              >
-                {item.label}
-              </Link>
-            ))}
+            {nav.map((item) => {
+              const children = 'children' in item ? item.children : undefined;
+              return (
+                <div key={item.label} className="border-b border-line last:border-0">
+                  <Link
+                    href={item.href}
+                    onClick={() => setMenuOpen(false)}
+                    className="block py-3 text-ink-soft"
+                  >
+                    {item.label}
+                  </Link>
+                  {children && children.length > 0 && (
+                    <div className="pb-2 pl-3 border-l border-line ml-1 flex flex-col">
+                      {children.map((c) => (
+                        <Link
+                          key={c.href}
+                          href={c.href}
+                          onClick={() => setMenuOpen(false)}
+                          className="py-2 text-sm text-muted hover:text-accent transition-colors"
+                        >
+                          {c.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </nav>
       )}

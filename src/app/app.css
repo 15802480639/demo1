@@ -14,6 +14,15 @@
   --color-accent-pale: #f3ead9;
   --color-forest: #2c3a2e; /* deep golf green */
 
+  /* ── 明亮买手店色板（2026-10-23 客户要求：整体提亮、高级、精致） ──
+     说明：原有令牌全部保留（不破坏已上线页面），
+     新增一组更浅的米白/浅灰/香槟色，供页脚与首页区块改用。 */
+  --color-cream: #faf8f4; /* 浅米白 —— 页脚底色 */
+  --color-sand: #f3efe7; /* 浅米色 —— 次级区块 */
+  --color-mist: #eceef0; /* 浅灰 —— 分隔与标签底 */
+  --color-champagne: #d9c3a0; /* 浅香槟 —— 装饰线与点缀 */
+  --color-champagne-deep: #c4a878; /* 深一档香槟 —— 悬停态 */
+
   --font-sans: "Pretendard", "Noto Sans KR", "PingFang SC", system-ui,
     -apple-system, "Segoe UI", sans-serif;
   --font-display: "Cormorant Garamond", "Pretendard", "Noto Sans KR", serif;

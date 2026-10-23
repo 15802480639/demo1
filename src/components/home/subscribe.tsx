@@ -34,16 +34,17 @@ export function Subscribe() {
   }
 
   return (
-    <section className="bg-ink text-white">
+    // 2026-10-23 客户要求整体提亮：订阅区由近黑底改为浅香槟米底 + 金色按钮
+    <section className="bg-sand border-y border-line">
       <div className="mx-auto max-w-[1400px] px-4 sm:px-8 py-20 text-center">
-        <h2 className="font-display text-3xl sm:text-5xl">
+        <h2 className="font-display text-3xl sm:text-5xl text-ink">
           {dict.home.subscribeTitle}
         </h2>
-        <p className="mt-4 text-white/70 max-w-md mx-auto">
+        <p className="mt-4 text-ink-soft max-w-md mx-auto">
           {dict.home.subscribeSub}
         </p>
         {done ? (
-          <p className="mt-8 text-accent tracking-widest text-sm">
+          <p className="mt-8 text-accent-strong tracking-widest text-sm">
             ✦ {dict.common.subscribe}
           </p>
         ) : (
@@ -57,7 +58,7 @@ export function Subscribe() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={dict.common.emailPlaceholder}
-              className="flex-1 bg-transparent border border-white/30 px-4 py-3 text-sm outline-none focus:border-accent transition-colors"
+              className="flex-1 bg-surface border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent transition-colors"
             />
             <button
               type="submit"
@@ -69,7 +70,7 @@ export function Subscribe() {
             </button>
           </form>
         )}
-        {err && <p className="mt-3 text-xs text-red-300">{err}</p>}
+        {err && <p className="mt-3 text-xs text-red-600">{err}</p>}
       </div>
     </section>
   );

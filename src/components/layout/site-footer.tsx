@@ -123,28 +123,30 @@ export function SiteFooter() {
     locText(cfg?.contactLine, locale) || `${siteConfig.company.email} · ${siteConfig.company.tel}`;
 
   return (
-    <footer className="bg-ink text-accent-pale mt-24">
+    // 2026-10-23 客户要求整体提亮：页脚由近黑底改为浅米白底 + 香槟金细线，
+    // 呈现高级买手店质感（原 bg-ink 整块深色是"沉重感"最大来源）。
+    <footer className="bg-cream border-t border-line mt-24">
       <div className="mx-auto max-w-[1400px] px-4 sm:px-8 py-16">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
           {/* brand block */}
           <div className="col-span-2 md:col-span-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={siteConfig.logoWhite}
+              src={siteConfig.logo}
               alt={siteConfig.nameKo}
               width={140}
               height={71}
               className="h-9 w-auto mb-4"
             />
-            <p className="text-sm leading-relaxed opacity-70 max-w-xs">{brandDesc}</p>
+            <p className="text-sm leading-relaxed text-ink-soft max-w-xs">{brandDesc}</p>
             <div className="flex gap-4 mt-6">
               {youtube && (
-                <a href={youtube} className="text-white/80 hover:text-accent transition-colors text-sm">
+                <a href={youtube} className="text-ink-soft hover:text-accent transition-colors text-sm">
                   YouTube
                 </a>
               )}
               {instagram && (
-                <a href={instagram} className="text-white/80 hover:text-accent transition-colors text-sm">
+                <a href={instagram} className="text-ink-soft hover:text-accent transition-colors text-sm">
                   Instagram
                 </a>
               )}
@@ -153,13 +155,13 @@ export function SiteFooter() {
 
           {columns.map((col, i) => (
             <div key={i}>
-              <h4 className="text-white text-sm tracking-wide mb-4">{col.title}</h4>
+              <h4 className="text-ink text-sm tracking-wide mb-4">{col.title}</h4>
               <ul className="space-y-3">
                 {col.links.map((l, j) => (
                   <li key={j}>
                     <Link
                       href={l.href}
-                      className="text-sm opacity-70 hover:opacity-100 hover:text-accent transition-all"
+                      className="text-sm text-muted hover:text-accent transition-colors"
                     >
                       {l.label}
                     </Link>
@@ -170,9 +172,9 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <div className="luxe-rule my-10 bg-white/10" />
+        <div className="luxe-rule my-10 bg-line" />
 
-        <div className="flex flex-col sm:flex-row justify-between gap-4 text-xs opacity-60">
+        <div className="flex flex-col sm:flex-row justify-between gap-4 text-xs text-muted">
           <p>{copyright}</p>
           <p>{contactLine}</p>
         </div>

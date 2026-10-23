@@ -5,12 +5,13 @@ import {
   urlHome,
   urlProduct,
   urlProducts,
-  urlCategory,
+  urlCategoryPath,
   urlBrands,
   urlFaq,
   urlSearch,
   isValidInternalUrl,
 } from '@/lib/urls';
+import { getCategoryTree, type CategoryNode } from '@/lib/category-tree';
 
 /**
  * llms.txt —— AI 搜索引擎的站点说明书。
@@ -81,7 +82,7 @@ export async function GET(): Promise<Response> {
     take: 80,
   });
 
-  const [intro, products, categories, facts] = await Promise.all([
+  const [intro, products, categories, facts, catTree] = await Promise.all([
     getLlmsIntro(),
     prisma.product.findMany({
       where: { status: 'active' },
@@ -100,6 +101,7 @@ export async function GET(): Promise<Response> {
     }),
     prisma.category.findMany({ select: { slug: true, name: true } }),
     getEffectiveFacts('en'),
+    getCategoryTree(),
   ]);
 
   const L: string[] = [];
@@ -147,21 +149,35 @@ export async function GET(): Promise<Response> {
   );
   L.push('');
 
-  // ── 分类（用真实存在的 /{locale}/products?cat=xxx） ──
+  // ── 分类（3 级层级，新路径 /{locale}/c/一级/二级/三级） ──
   if (categories.length > 0) {
     L.push('## Categories');
     L.push('');
-    for (const loc of locales) {
-      for (const c of categories) {
-        const href = urlCategory(c.slug, loc);
-        // 自检：链接不合法就退化成纯文本，绝不给 AI 死链
-        if (isValidInternalUrl(href)) {
-          L.push(`- [${N} ${c.name}](${href}): ${N} ${c.name} category (${loc}).`);
-        } else {
-          L.push(`- ${N} ${c.name}: ${N} ${c.name} category.`);
+    // 按层级输出：让 AI 知道分类树的结构，而不是一堆平铺条目
+    const emit = (
+      nodes: CategoryNode[],
+      trail: string[],
+      trailNames: string[],
+    ) => {
+      for (const n of nodes) {
+        const path = [...trail, n.slug];
+        const names = [...trailNames, n.name];
+        const label = names.join(' > ');
+        for (const loc of locales) {
+          const href = urlCategoryPath(path, loc);
+          // 自检：链接不合法就退化成纯文本，绝不给 AI 死链
+          if (isValidInternalUrl(href)) {
+            L.push(
+              `- [${N} ${label}](${href}): ${N} ${label} category (${loc}).`,
+            );
+          } else {
+            L.push(`- ${N} ${label}: ${N} ${label} category.`);
+          }
         }
+        if (n.children.length) emit(n.children, path, names);
       }
-    }
+    };
+    emit(catTree, [], []);
     L.push('');
   }
 

@@ -133,9 +133,10 @@ export async function pushPaths(paths: string[], key?: string) {
 /** 后台一键推送：全站 URL（首页+ 列表 + FAQ + 全部产品 + 分类） */
 export async function pushAllSiteUrls(key?: string) {
   const { prisma } = await import('@/lib/prisma');
-  const [slugs, cats] = await Promise.all([
+  const { getCategoryTree } = await import('@/lib/category-tree');
+  const [slugs, catTree] = await Promise.all([
     prisma.product.findMany({ where: { status: 'active' }, select: { slug: true } }),
-    prisma.category.findMany({ select: { slug: true } }),
+    getCategoryTree(),
   ]);
 
   const paths = [
@@ -156,10 +157,18 @@ export async function pushAllSiteUrls(key?: string) {
   for (const p of paths) {
     for (const l of locs) urls.push(`${base}/${l}${p === '/' ? '' : p}`);
   }
-  // 分类页是 query URL，单独补
-  for (const c of cats) {
-    for (const l of locs) urls.push(`${base}/${l}/products?cat=${c.slug}`);
-  }
+  // 分类页：走独立路径 /{locale}/c/一级/二级/三级（与前台路由一致）
+  const emitCats = (
+    nodes: Awaited<ReturnType<typeof getCategoryTree>>,
+    trail: string[],
+  ) => {
+    for (const n of nodes) {
+      const path = [...trail, n.slug];
+      for (const l of locs) urls.push(`${base}/${l}/c/${path.join('/')}`);
+      if (n.children.length) emitCats(n.children, path);
+    }
+  };
+  emitCats(catTree, []);
 
   const res = await submitUrls(urls, key);
   return { ...res, totalCollected: urls.length };

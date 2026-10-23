@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
 import { locales } from '@/i18n/config';
 import { getAllProductSlugs, getBrands } from '@/lib/services/product-service';
-import { baseUrl, urlProduct, urlBrand } from '@/lib/urls';
+import { baseUrl, urlProduct, urlBrand, urlCategoryPath } from '@/lib/urls';
+import { getCategoryTree, type CategoryNode } from '@/lib/category-tree';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = baseUrl();
@@ -29,8 +30,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: '/info/contact', priority: 0.4, freq: 'monthly' as const },
   ];
 
-  const [slugs, brands] = await Promise.all([getAllProductSlugs(), getBrands()]);
+  const [slugs, brands, catTree] = await Promise.all([
+    getAllProductSlugs(),
+    getBrands(),
+    getCategoryTree(),
+  ]);
   const now = new Date();
+
+  // 分类路径集合：3 级全路径都进 sitemap（一级/二级/三级各自都是可访问页）
+  const categoryPaths: string[][] = [];
+  const collectCats = (nodes: CategoryNode[], trail: string[]) => {
+    for (const n of nodes) {
+      const path = [...trail, n.slug];
+      categoryPaths.push(path);
+      if (n.children.length) collectCats(n.children, path);
+    }
+  };
+  collectCats(catTree, []);
 
   const routes: MetadataRoute.Sitemap = [];
 
@@ -44,6 +60,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         alternates: {
           languages: Object.fromEntries(
             locales.map((l) => [l, withLocale(l, r.path)])
+          ),
+        },
+      });
+    }
+
+    // 分类页（3 级独立路径），层级越深权重略低
+    for (const path of categoryPaths) {
+      routes.push({
+        url: urlCategoryPath(path, locale as never),
+        lastModified: now,
+        changeFrequency: 'weekly',
+        priority: path.length === 1 ? 0.8 : path.length === 2 ? 0.7 : 0.6,
+        alternates: {
+          languages: Object.fromEntries(
+            locales.map((l) => [l, urlCategoryPath(path, l as never)])
           ),
         },
       });
