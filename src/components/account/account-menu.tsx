@@ -10,7 +10,15 @@ import { useCart, cartCount } from '@/lib/cart-store';
  * 账户页菜单卡：图标 + 数量徽章 + 退出登录。
  * 订单数由服务端算好传入；购物车走本地 store；收藏实时拉接口。
  */
-export function AccountMenu({ ordersCount }: { ordersCount: number }) {
+export function AccountMenu({
+  ordersCount,
+  points,
+  coupons,
+}: {
+  ordersCount: number;
+  points?: number;
+  coupons?: number;
+}) {
   const { locale, dict } = useLocale();
   const { user, logout } = useAuth();
   const lines = useCart((s) => s.lines);
@@ -72,11 +80,57 @@ export function AccountMenu({ ordersCount }: { ordersCount: number }) {
         </svg>
       ),
     },
+    {
+      label:
+        locale === 'zh'
+          ? '我的优惠券'
+          : locale === 'en'
+            ? 'My coupons'
+            : '내 쿠폰',
+      href: `/${locale}/account/coupons`,
+      count: coupons ?? null,
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          <path
+            d="M12 8v2m0 2v2m0 2v2"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeDasharray="2 3"
+          />
+        </svg>
+      ),
+    },
+    {
+      label:
+        locale === 'zh'
+          ? '我的积分'
+          : locale === 'en'
+            ? 'My points'
+            : '내 포인트',
+      href: `/${locale}/account/points`,
+      count: points ?? null,
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+          <path
+            d="M12 7v10M9.5 9.5c0-1 1.2-1.5 2.5-1.5s2.5.5 2.5 1.5c0 2-5 1-5 3 0 1 1.2 1.5 2.5 1.5s2.5-.5 2.5-1.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      ),
+    },
   ];
 
   return (
     <div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-line border border-line">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-line border border-line">
         {items.map((m) => (
           <Link
             key={m.href}

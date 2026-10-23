@@ -413,6 +413,26 @@ export type AdminDict = {
   socialLinks: string;
   baiduVerification: string;
   sogouVerification: string;
+  // 积分体系
+  points: string;
+  pointSettings: string;
+  pointsIntro: string;
+  pointsEnabled: string;
+  pointsEarnPercent: string;
+  pointsMinSpend: string;
+  pointsPerKrw: string;
+  pointsMaxUse: string;
+  pointsEarnWays: string;
+  pointsBalance: string;
+  pointsHistory: string;
+  pointsUsed: string;
+  pointsEarned: string;
+  pointsDiscount: string;
+  pointsNone: string;
+  adjustPoints: string;
+  grantCoupon: string;
+  myCoupons: string;
+  myPoints: string;
 };
 
 const ko: Dict = {
@@ -825,6 +845,25 @@ const ko: Dict = {
     socialLinks: '동일 계정(SameAs)',
     baiduVerification: '百度验证码',
     sogouVerification: '搜狗验证码',
+    points: '포인트',
+    pointSettings: '포인트 설정',
+    pointsIntro: '적립·사용 규칙을 여기서 설정합니다.',
+    pointsEnabled: '포인트 시스템 사용',
+    pointsEarnPercent: '구매 적립 비율(%)',
+    pointsMinSpend: '포인트 사용 최소 주문 금액(₩)',
+    pointsPerKrw: '포인트 환산 비율(포인트 = 1₩)',
+    pointsMaxUse: '주문당 최대 사용 비율(%)',
+    pointsEarnWays: '적립 방법',
+    pointsBalance: '보유 포인트',
+    pointsHistory: '포인트 내역',
+    pointsUsed: '사용한 포인트',
+    pointsEarned: '적립된 포인트',
+    pointsDiscount: '포인트 할인 금액',
+    pointsNone: '포인트 내역이 없습니다.',
+    adjustPoints: '포인트 조정',
+    grantCoupon: '쿠폰 지급',
+    myCoupons: '내 쿠폰',
+    myPoints: '내 포인트',
   },
 };
 
@@ -1237,6 +1276,25 @@ const zh: Dict = {
     socialLinks: '同款账号 SameAs',
     baiduVerification: '百度验证码',
     sogouVerification: '搜狗验证码',
+    points: '积分',
+    pointSettings: '积分设置',
+    pointsIntro: '在这里设置积分的获得与使用规则。',
+    pointsEnabled: '启用积分系统',
+    pointsEarnPercent: '消费返积分比例（%）',
+    pointsMinSpend: '使用积分的最低订单金额（₩）',
+    pointsPerKrw: '积分兑换比例（多少积分抵 1₩）',
+    pointsMaxUse: '单笔订单最多可抵比例（%）',
+    pointsEarnWays: '积分获得途径',
+    pointsBalance: '当前积分余额',
+    pointsHistory: '积分明细',
+    pointsUsed: '使用积分',
+    pointsEarned: '获得积分',
+    pointsDiscount: '积分抵扣金额',
+    pointsNone: '暂无积分记录。',
+    adjustPoints: '调整积分',
+    grantCoupon: '发放优惠券',
+    myCoupons: '我的优惠券',
+    myPoints: '我的积分',
   },
 };
 
@@ -1650,6 +1708,25 @@ const en: Dict = {
     socialLinks: 'SameAs profiles',
     baiduVerification: 'Baidu verification',
     sogouVerification: 'Sogou verification',
+    points: 'Points',
+    pointSettings: 'Point settings',
+    pointsIntro: 'Configure how points are earned and redeemed here.',
+    pointsEnabled: 'Enable points system',
+    pointsEarnPercent: 'Earn rate on spend (%)',
+    pointsMinSpend: 'Minimum order to use points (₩)',
+    pointsPerKrw: 'Redemption rate (points per ₩1)',
+    pointsMaxUse: 'Max redeemable per order (%)',
+    pointsEarnWays: 'How to earn points',
+    pointsBalance: 'Point balance',
+    pointsHistory: 'Point history',
+    pointsUsed: 'Points used',
+    pointsEarned: 'Points earned',
+    pointsDiscount: 'Points discount',
+    pointsNone: 'No point activity yet.',
+    adjustPoints: 'Adjust points',
+    grantCoupon: 'Grant coupon',
+    myCoupons: 'My coupons',
+    myPoints: 'My points',
   },
 };
 

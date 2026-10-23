@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { useCart, cartTotal } from '@/lib/cart-store';
@@ -12,7 +12,26 @@ type Placed = {
   total: number;
   subtotal: number;
   shippingFee: number;
-  items: { name: string; price: number; quantity: number; imageUrl: string | null }[];
+  pointsUsed: number;
+  pointsDiscount: number;
+  items: { name: string; price: number; quantity: number; imageUrl: string | null; skuLabel: string | null }[];
+};
+
+type PointQuote = {
+  ok: boolean;
+  reason?: string;
+  rule: {
+    enabled: boolean;
+    earnPercent: number;
+    minSpendForUse: number;
+    pointsPerKrw: number;
+    maxUsePercent: number;
+  };
+  userPoints: number;
+  maxPoints: number;
+  maxDiscount: number;
+  eligible: boolean;
+  onePointValue: number;
 };
 
 export default function CheckoutPage() {
@@ -42,6 +61,58 @@ export default function CheckoutPage() {
   const [coupon, setCoupon] = useState('');
   const [couponMsg, setCouponMsg] = useState('');
   const [discount, setDiscount] = useState(0);
+  // 账户里的优惠券（可直接点选）
+  const [myCoupons, setMyCoupons] = useState<
+    { id: string; code: string; type: string; value: number; minSpend: number; status: string }[]
+  >([]);
+
+  // 拉取账户优惠券
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/account/coupons')
+      .then((r) => r.json())
+      .then((d) => {
+        const usable = (d.coupons ?? []).filter((c: any) => c.status === 'available');
+        setMyCoupons(usable);
+      })
+      .catch(() => {});
+  }, [user]);
+
+  // ---- 积分 ----
+  const [quote, setQuote] = useState<PointQuote | null>(null);
+  const [usePoints, setUsePoints] = useState(0);
+  const [pointsOpen, setPointsOpen] = useState(false);
+
+  /** 拉取积分试算（购物车或优惠券变化时都要重算） */
+  const refreshQuote = useCallback(async () => {
+    if (!user || lines.length === 0) {
+      setQuote(null);
+      return;
+    }
+    try {
+      const res = await fetch('/api/account/points/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: lines.map((l) => ({ slug: l.slug, qty: l.qty, price: l.price })),
+        }),
+      });
+      const d = await res.json();
+      if (d?.ok) {
+        setQuote(d);
+        // 超出上限时自动收敛
+        setUsePoints((prev) => Math.min(prev, d.maxPoints));
+      } else {
+        setQuote(null);
+      }
+    } catch {
+      setQuote(null);
+    }
+  }, [user, lines]);
+
+  useEffect(() => {
+    refreshQuote();
+  }, [refreshQuote]);
 
   async function applyCoupon() {
     setCouponMsg('');
@@ -109,8 +180,12 @@ export default function CheckoutPage() {
   }, [user]);
 
   const total = cartTotal(lines);
-  const shippingFee = total - discount >= 100000 || total === 0 ? 0 : 3000;
-  const grand = Math.max(0, total - discount) + shippingFee;
+  // 积分抵扣金额：向下取整由服务端再校验一次，这里只做显示
+  const pointsDiscount =
+    quote && usePoints > 0 ? Math.floor((usePoints * 100) / quote.rule.pointsPerKrw) : 0;
+  const payable = Math.max(0, total - discount - pointsDiscount);
+  const shippingFee = payable >= 100000 || total === 0 ? 0 : 3000;
+  const grand = payable + shippingFee;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -122,9 +197,15 @@ export default function CheckoutPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: lines.map((l) => ({ slug: l.slug, size: l.size, qty: l.qty })),
+          items: lines.map((l) => ({
+            slug: l.slug,
+            size: l.size,
+            options: l.options,
+            qty: l.qty,
+          })),
           shipping: form,
           couponCode: discount > 0 ? coupon.trim().toUpperCase() : undefined,
+          usePoints: usePoints > 0 ? usePoints : undefined,
         }),
       });
       const data = await res.json();
@@ -161,11 +242,24 @@ export default function CheckoutPage() {
           {placed.items.map((it, i) => (
             <div key={i} className="flex justify-between text-sm">
               <span className="text-ink-soft">
-                {it.name} × {it.quantity}
+                {it.name}
+                {it.skuLabel ? ` (${it.skuLabel})` : ''} × {it.quantity}
               </span>
               <span>{formatPrice(it.price * it.quantity, locale)}</span>
             </div>
           ))}
+          {placed.pointsDiscount > 0 && (
+            <div className="flex justify-between text-sm text-accent">
+              <span>
+                {locale === 'zh'
+                  ? `积分抵扣（${placed.pointsUsed.toLocaleString()} 分）`
+                  : locale === 'en'
+                    ? `Points used (${placed.pointsUsed.toLocaleString()})`
+                    : `포인트 사용 (${placed.pointsUsed.toLocaleString()}P)`}
+              </span>
+              <span>-{formatPrice(placed.pointsDiscount, locale)}</span>
+            </div>
+          )}
           <div className="luxe-rule my-3" />
           <div className="flex justify-between font-medium">
             <span>{dict.common.price}</span>
@@ -282,6 +376,43 @@ export default function CheckoutPage() {
 
             {/* coupon */}
             <div className="mt-4">
+              {/* 账户里的优惠券可直接点选 */}
+              {myCoupons.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {myCoupons.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setCoupon(c.code);
+                        setCouponMsg('');
+                        // 立刻试算
+                        setTimeout(() => {
+                          const el = document.getElementById('coupon-apply-btn');
+                          (el as HTMLButtonElement | null)?.click();
+                        }, 0);
+                      }}
+                      className={`text-xs px-2.5 py-1 border transition-colors ${
+                        coupon === c.code
+                          ? 'border-accent bg-accent text-white'
+                          : 'border-line text-accent hover:border-accent'
+                      }`}
+                      title={
+                        c.type === 'percent'
+                          ? `${c.value}% 折扣`
+                          : `减 ₩${c.value.toLocaleString()}`
+                      }
+                    >
+                      {c.code}
+                      {c.minSpend > 0 && (
+                        <span className="opacity-70 ml-1">
+                          (满{c.minSpend.toLocaleString()})
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-2">
                 <input
                   value={coupon}
@@ -290,6 +421,7 @@ export default function CheckoutPage() {
                   className="flex-1 border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
                 />
                 <button
+                  id="coupon-apply-btn"
                   type="button"
                   onClick={applyCoupon}
                   className="btn-outline text-sm px-4"
@@ -304,10 +436,124 @@ export default function CheckoutPage() {
               )}
             </div>
 
+            {/* ---------- 积分抵扣 ---------- */}
+            {quote?.rule?.enabled && (
+              <div className="mt-4 border border-line bg-surface p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs tracking-widest text-muted">
+                    {locale === 'zh' ? '使用积分' : locale === 'en' ? 'Use points' : '포인트 사용'}
+                  </span>
+                  <span className="text-xs">
+                    {locale === 'zh'
+                      ? `可用 ${quote.userPoints.toLocaleString()} 分`
+                      : locale === 'en'
+                        ? `${quote.userPoints.toLocaleString()} pts`
+                        : `${quote.userPoints.toLocaleString()}P 사용 가능`}
+                  </span>
+                </div>
+
+                {quote.eligible ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setPointsOpen((v) => !v)}
+                      className="w-full mt-2 flex items-center justify-between border border-line px-3 py-2 text-sm hover:border-accent transition-colors"
+                    >
+                      <span className={usePoints > 0 ? 'text-accent' : 'text-ink-soft'}>
+                        {usePoints > 0
+                          ? locale === 'zh'
+                            ? `已用 ${usePoints.toLocaleString()} 分，抵 ${formatPrice(pointsDiscount, locale)}`
+                            : locale === 'en'
+                              ? `${usePoints.toLocaleString()} pts used (−${formatPrice(pointsDiscount, locale)})`
+                              : `${usePoints.toLocaleString()}P 사용 (${formatPrice(pointsDiscount, locale)} 할인)`
+                          : locale === 'zh'
+                            ? `本单最多可用 ${quote.maxPoints.toLocaleString()} 分（抵 ${formatPrice(quote.maxDiscount, locale)}）`
+                            : locale === 'en'
+                              ? `Up to ${quote.maxPoints.toLocaleString()} pts (${formatPrice(quote.maxDiscount, locale)})`
+                              : `최대 ${quote.maxPoints.toLocaleString()}P 사용 가능 (${formatPrice(quote.maxDiscount, locale)})`}
+                      </span>
+                      <span className="text-muted text-xs">{pointsOpen ? '▲' : '▼'}</span>
+                    </button>
+
+                    {pointsOpen && (
+                      <div className="mt-3">
+                        <input
+                          type="number"
+                          min={0}
+                          max={quote.maxPoints}
+                          value={usePoints}
+                          onChange={(e) => {
+                            const n = Math.max(0, Math.min(quote.maxPoints, Math.floor(Number(e.target.value) || 0)));
+                            setUsePoints(n);
+                          }}
+                          className="w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+                        />
+                        <div className="flex justify-between mt-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setUsePoints(0)}
+                            className="text-xs text-muted hover:text-ink px-2"
+                          >
+                            {locale === 'zh' ? '不使用' : locale === 'en' ? 'Clear' : '사용 안 함'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUsePoints(quote.maxPoints)}
+                            className="text-xs text-accent hover:underline px-2"
+                          >
+                            {locale === 'zh' ? '全部使用' : locale === 'en' ? 'Use all' : '전체 사용'}
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-muted mt-1">
+                          {locale === 'zh'
+                            ? `${quote.rule.pointsPerKrw.toLocaleString()} 积分 = 1₩，单笔最多抵订单金额的 ${quote.rule.maxUsePercent}%。`
+                            : locale === 'en'
+                              ? `${quote.rule.pointsPerKrw} pts = ₩1. Up to ${quote.rule.maxUsePercent}% of order value.`
+                              : `${quote.rule.pointsPerKrw}P = ₩1, 주문 금액의 최대 ${quote.rule.maxUsePercent}%까지 사용 가능`}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[11px] text-muted mt-2">
+                    {quote.reason === 'BELOW_MIN'
+                      ? locale === 'zh'
+                        ? `订单实付满 ${quote.rule.minSpendForUse.toLocaleString()}₩ 才能使用积分。`
+                        : locale === 'en'
+                          ? `Use points on orders over ₩${quote.rule.minSpendForUse.toLocaleString()}.`
+                          : `₩${quote.rule.minSpendForUse.toLocaleString()} 이상 주문에서 포인트 사용 가능`
+                      : quote.reason === 'NO_POINTS'
+                        ? locale === 'zh'
+                          ? '你还没有积分，购买商品后可获得。'
+                          : locale === 'en'
+                            ? 'You have no points yet. Earn them by shopping.'
+                            : '아직 포인트가 없습니다. 구매 후 적립됩니다.'
+                        : locale === 'zh'
+                          ? '本单商品不支持积分抵扣。'
+                          : locale === 'en'
+                            ? 'Items in this order cannot be paid with points.'
+                            : '이 주문의 상품은 포인트 결제를 사용할 수 없습니다.'}
+                  </p>
+                )}
+              </div>
+            )}
+
             {discount > 0 && (
               <div className="flex justify-between text-sm text-accent mt-3">
                 <span>{dict.checkout.discountLabel}</span>
                 <span>-{formatPrice(discount, locale)}</span>
+              </div>
+            )}
+            {pointsDiscount > 0 && (
+              <div className="flex justify-between text-sm text-accent mt-1">
+                <span>
+                  {locale === 'zh'
+                    ? `积分抵扣（${usePoints.toLocaleString()} 分）`
+                    : locale === 'en'
+                      ? `Points used (${usePoints.toLocaleString()})`
+                      : `포인트 사용 (${usePoints.toLocaleString()}P)`}
+                </span>
+                <span>-{formatPrice(pointsDiscount, locale)}</span>
               </div>
             )}
             <div className="luxe-rule my-4" />
@@ -317,6 +563,15 @@ export default function CheckoutPage() {
                 {formatPrice(grand, locale)}
               </span>
             </div>
+            {quote?.rule?.enabled && quote.eligible && (
+              <p className="text-[11px] text-muted mt-1 text-right">
+                {locale === 'zh'
+                  ? `本单还将获得约 ${Math.floor((grand * quote.rule.earnPercent) / 100).toLocaleString()} 积分`
+                  : locale === 'en'
+                    ? `You'll earn about ${Math.floor((grand * quote.rule.earnPercent) / 100).toLocaleString()} points`
+                    : `약 ${Math.floor((grand * quote.rule.earnPercent) / 100).toLocaleString()}P 적립 예정`}
+              </p>
+            )}
             <button
               type="submit"
               disabled={loading}

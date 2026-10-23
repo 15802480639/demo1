@@ -53,7 +53,21 @@ export async function PATCH(
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ ok: true });
     }
-    const order = await prisma.order.update({ where: { id }, data: patch });
+
+    // 状态变更必须走 updateOrderStatus —— 积分的发放（→paid）与扣回（→refunded/cancelled）
+    // 都挂在这个函数上。直接 prisma.order.update 会绕过积分结算。
+    let order;
+    if (patch.status) {
+      order = await updateOrderStatus(id, String(patch.status));
+      // 其余字段（物流、联系标记）单独更新
+      const rest = { ...patch };
+      delete rest.status;
+      if (Object.keys(rest).length > 0) {
+        order = await prisma.order.update({ where: { id }, data: rest });
+      }
+    } else {
+      order = await prisma.order.update({ where: { id }, data: patch });
+    }
     return NextResponse.json({ ok: true, order });
   } catch (e: any) {
     console.error('update order error', e);

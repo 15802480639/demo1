@@ -27,6 +27,7 @@ export async function POST(req: Request) {
       shipping,
       session,
       couponCode: body.couponCode || undefined,
+      usePoints: Number(body.usePoints) > 0 ? Math.floor(Number(body.usePoints)) : undefined,
     });
 
     return NextResponse.json({
@@ -41,11 +42,14 @@ export async function POST(req: Request) {
         couponCode: order.couponCode,
         status: order.status,
         createdAt: order.createdAt,
+        pointsUsed: order.pointsUsed,
+        pointsDiscount: order.pointsDiscount,
         items: order.items.map((i) => ({
           name: i.name,
           price: i.price,
           quantity: i.quantity,
           imageUrl: i.imageUrl,
+          skuLabel: i.skuLabel,
         })),
       },
     });

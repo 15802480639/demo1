@@ -4,6 +4,8 @@ import { isLocale, type Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 import { getSession } from '@/lib/auth';
 import { getOrdersByUser } from '@/lib/services/order-service';
+import { getUserPoints, getPointRule } from '@/lib/points';
+import { prisma } from '@/lib/prisma';
 import { AccountMenu } from '@/components/account/account-menu';
 import { AddressManager } from '@/components/account/address-manager';
 import { PasswordForm } from '@/components/account/password-form';
@@ -19,7 +21,20 @@ export default async function AccountPage({
   const session = await getSession();
   if (!session) redirect(`/${loc}/login?redirect=/${loc}/account`);
 
-  const orders = await getOrdersByUser(session.id);
+  const [orders, points, rule, couponCount] = await Promise.all([
+    getOrdersByUser(session.id),
+    getUserPoints(session.id),
+    getPointRule(),
+    prisma.userCoupon
+      .count({
+        where: {
+          userId: session.id,
+          status: 'available',
+          OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
+        },
+      })
+      .catch(() => 0),
+  ]);
 
   return (
     <div className="mx-auto max-w-[900px] px-4 sm:px-8 py-12">
@@ -30,16 +45,40 @@ export default async function AccountPage({
         {session.name ? `${session.name} · ` : ''}
         {session.email ?? session.username ?? ''}
       </p>
-      {session.role === 'admin' && (
+
+      {/* 积分卡片 */}
+      {rule.enabled && (
         <Link
-          href={`/${loc}/admin`}
-          className="inline-block text-xs tracking-widest text-accent border border-accent px-3 py-1 mb-6 hover:bg-accent hover:text-white transition-colors"
+          href={`/${loc}/account/points`}
+          className="block border border-accent/40 bg-accent/5 px-5 py-4 mb-6 hover:bg-accent/10 transition-colors"
         >
-          {dict.account.adminDashboard}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs tracking-widest text-muted mb-1">
+                {loc === 'zh' ? '我的积分' : loc === 'en' ? 'My points' : '내 포인트'}
+              </p>
+              <p className="font-display text-3xl text-accent">
+                {points.toLocaleString()}
+                <span className="text-sm text-muted ml-1.5">
+                  {loc === 'zh' ? '分' : loc === 'en' ? 'pts' : 'P'}
+                </span>
+              </p>
+              <p className="text-xs text-muted mt-1">
+                {loc === 'zh'
+                  ? `订单实付满 ${rule.minSpendForUse.toLocaleString()}₩ 可用积分抵扣`
+                  : loc === 'en'
+                    ? `Use points on orders over ₩${rule.minSpendForUse.toLocaleString()}`
+                    : `₩${rule.minSpendForUse.toLocaleString()} 이상 주문에서 포인트 사용 가능`}
+              </p>
+            </div>
+            <span className="text-xs tracking-widest text-accent whitespace-nowrap">
+              {loc === 'zh' ? '查看明细 →' : loc === 'en' ? 'Details →' : '내역 보기 →'}
+            </span>
+          </div>
         </Link>
       )}
 
-      <AccountMenu ordersCount={orders.length} />
+      <AccountMenu ordersCount={orders.length} points={points} coupons={couponCount} />
 
       <div className="mt-10 space-y-6">
         <AddressManager />

@@ -37,6 +37,12 @@ type ProductRow = {
   category: { id: string; name: string } | null;
   skus: Sku[];
   specs?: SpecRow[];
+  // 积分配置
+  earnPoints: boolean;
+  earnType: string;
+  earnValue: number;
+  usePoints: boolean;
+  maxPointUse: number;
 };
 type Option = { id: string; name: string };
 
@@ -218,6 +224,18 @@ export default function AdminProductsPage() {
                     {p.code || '—'} · {p.brand?.name ?? '—'} · {p.category?.name ?? '—'} ·{' '}
                     {p.skus.length} 个规格
                   </p>
+                  <p className="text-[11px] text-muted mt-0.5">
+                    积分：
+                    {p.earnPoints
+                      ? p.earnType === 'fixed'
+                        ? `每件返 ${p.earnValue} 分`
+                        : p.earnValue > 0
+                          ? `返 ${p.earnValue}%`
+                          : '返积分（用全局比例）'
+                      : '不返积分'}
+                    {' · '}
+                    {p.usePoints ? '可用积分抵扣' : '不可用积分抵扣'}
+                  </p>
                 </div>
                 <span className="text-sm w-28 text-right">
                   {formatPrice(p.price, 'ko')}
@@ -364,6 +382,17 @@ function ProductForm({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
+  // ---- 积分配置 ----
+  const [earnPoints, setEarnPoints] = useState(editing?.earnPoints ?? true);
+  const [earnType, setEarnType] = useState(editing?.earnType ?? 'percent');
+  const [earnValue, setEarnValue] = useState(
+    editing?.earnValue ? String(editing.earnValue) : '',
+  );
+  const [usePoints, setUsePoints] = useState(editing?.usePoints ?? true);
+  const [maxPointUse, setMaxPointUse] = useState(
+    editing?.maxPointUse ? String(editing.maxPointUse) : '',
+  );
+
   function addSku() {
     setSkus((s) => [...s, { options: {}, stock: 0, price: '' }]);
   }
@@ -485,6 +514,12 @@ function ProductForm({
         .split(/[\n,]/)
         .map((x) => x.trim())
         .filter(Boolean),
+      // 积分配置
+      earnPoints,
+      earnType,
+      earnValue: earnValue === '' ? 0 : Number(earnValue),
+      usePoints,
+      maxPointUse: maxPointUse === '' ? 0 : Number(maxPointUse),
       skus: skus.map((s) => ({
         id: s.id,
         options: s.options,
@@ -617,6 +652,86 @@ function ProductForm({
               <option value="active">在售</option>
               <option value="archived">已归档</option>
             </select>
+          </div>
+        </div>
+
+        {/* ---------- 积分配置 ---------- */}
+        <div className="border border-line p-4 space-y-4">
+          <div>
+            <h3 className="font-display text-lg text-ink">积分设置</h3>
+            <p className="text-[11px] text-muted mt-1">
+              控制这个商品「买完给不给积分」和「能不能用积分抵扣」。全局默认值在「积分设置」页。
+            </p>
+          </div>
+
+          {/* 返积分 */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={earnPoints}
+                onChange={(e) => setEarnPoints(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm text-ink">购买本商品可以获得积分</span>
+            </label>
+            {earnPoints && (
+              <div className="grid grid-cols-2 gap-3 pl-6">
+                <div>
+                  <label className={label}>返积分方式</label>
+                  <select
+                    className={input}
+                    value={earnType}
+                    onChange={(e) => setEarnType(e.target.value)}
+                  >
+                    <option value="percent">按实付金额百分比</option>
+                    <option value="fixed">按件固定返</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={label}>
+                    {earnType === 'fixed' ? '每件返多少积分' : '返积分比例（%）'}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    className={input}
+                    value={earnValue}
+                    placeholder={earnType === 'fixed' ? '如 500' : '留空 = 用全局比例'}
+                    onChange={(e) => setEarnValue(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 用积分 */}
+          <div className="space-y-2 border-t border-line pt-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={usePoints}
+                onChange={(e) => setUsePoints(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm text-ink">本商品可以使用积分抵扣</span>
+            </label>
+            {usePoints && (
+              <div className="pl-6">
+                <label className={label}>本商品单笔最多可用积分数</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={input + ' max-w-[240px]'}
+                  value={maxPointUse}
+                  placeholder="留空 = 不单独限制"
+                  onChange={(e) => setMaxPointUse(e.target.value)}
+                />
+                <p className="text-[11px] text-muted mt-1">
+                  留空表示跟随全局上限（单笔最多抵订单金额的设定百分比）。
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

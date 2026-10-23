@@ -19,6 +19,8 @@ model User {
   name          String?
   passwordHash  String?
   role          String         @default("customer") // customer | admin
+  /// 积分余额（可抵扣现金的虚拟权益）。所有增减必须经 PointTransaction 留痕，禁止直接改。
+  points        Int            @default(0)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   addresses     Address[]
@@ -27,6 +29,8 @@ model User {
   wishlist      Wishlist[]
   cart          Cart?
   consultations Consultation[]
+  pointTxns     PointTransaction[]
+  userCoupons   UserCoupon[]
 }
 
 model Address {
@@ -92,6 +96,17 @@ model Product {
   rating         Float          @default(0)
   reviewCount    Int            @default(0)
   featured       Boolean        @default(false)
+  // ---- 积分配置（商品级，可覆盖全局规则）----
+  /// 该商品是否参与「消费返积分」。false = 买了不返积分
+  earnPoints     Boolean        @default(true)
+  /// 返积分模式：percent = 按实付金额百分比返；fixed = 按件固定返
+  earnType       String         @default("percent") // percent | fixed
+  /// percent 时表示百分比整数（如 5 = 5%）；fixed 时表示每件返多少积分
+  earnValue      Int            @default(0)
+  /// 该商品是否允许用积分抵扣。false = 只能用现金
+  usePoints      Boolean        @default(true)
+  /// 该商品用积分抵扣时的「最多可抵扣积分上限」。0 = 不单独限制，跟随全局上限
+  maxPointUse    Int            @default(0)
   skus           Sku[]
   specs          ProductSpec[]
   reviews        Review[]
@@ -164,6 +179,14 @@ model Order {
   discount    Int         @default(0)
   shippingFee Int         @default(0)
   tax         Int         @default(0)
+  /// 本单抵扣掉的现金金额（由积分换算而来，单位韩元）
+  pointsDiscount Int      @default(0)
+  /// 本单实际消耗的积分数
+  pointsUsed     Int      @default(0)
+  /// 本单消费后赠送的积分数（退款时按这个数扣回）
+  pointsEarned   Int      @default(0)
+  /// 积分已结算标记：防止订单反复改状态导致重复发放/重复扣回
+  pointsSettled  Boolean  @default(false)
   total       Int
   currency    String      @default("KRW")
   couponCode  String?
@@ -175,6 +198,7 @@ model Order {
   address     Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
   shipmentId  String?
   paymentId   String?
+  pointTxns   PointTransaction[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
@@ -189,6 +213,85 @@ model OrderItem {
   price     Int
   quantity  Int
   imageUrl  String?
+  /// 下单时的规格快照（JSON）：{ "색상": "화이트", "사이즈": "M" }。
+  /// 为什么必须存快照：SKU 后续被改库存/改名，历史订单要保留当时买的是哪个色号尺码。
+  options   String? // JSON 字符串
+  /// 规格可读摘要，如「颜色:白色 / 尺码:M」，后台与前台订单详情直接展示
+  skuLabel  String?
+  /// 该行实际支付的金额（已按比例分摊优惠券与积分抵扣），用于精确返积分
+  paidAmount Int    @default(0)
+}
+
+// ---------------- 积分体系 ----------------
+
+/// 积分流水（每笔增减都留痕，用户在「我的积分」页看到的就是这张表）。
+///
+/// type 取值：
+///   earn        消费返积分（正向）
+///   use         下单抵扣积分（负向）
+///   refund_deduct 订单退款，扣回当初赠送的积分（负向）
+///   admin_add   后台手动增加（正向）
+///   admin_minus 后台手动扣减（负向）
+model PointTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 变动积分数（正=增加，负=扣减）
+  amount    Int
+  /// 变动类型：earn | use | refund_deduct | admin_add | admin_minus
+  type      String
+  /// 关联订单（后台手动调整时为空）
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  /// 备注：后台手动调整原因、返积分说明等
+  remark    String?
+  /// 变动后的积分余额快照，便于对账
+  balanceAfter Int
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+}
+
+/// 积分规则（全局单例，id 固定为 'global'）。
+/// 后台「积分设置」页读写这一行；商品级配置在 Product 上，可覆盖这里的默认值。
+model PointRule {
+  id String @id @default("global")
+  /// 积分系统总开关。关闭后前台不显示积分入口，下单也不再允许抵扣
+  enabled        Boolean  @default(true)
+  /// 消费返积分：按实付金额的百分比（整数，5 = 5%）
+  earnPercent    Int      @default(5)
+  /// 使用积分的门槛：订单实付需满多少韩元才允许用积分
+  minSpendForUse Int      @default(50000)
+  /// 多少积分抵 1 韩元（100 积分 = 1₩，即 1 积分 = 0.01₩）
+  pointsPerKrw   Int      @default(100)
+  /// 单笔订单最多能抵扣订单金额的百分之多少（防止用户把积分一次性全用光）
+  maxUsePercent  Int      @default(30)
+  updatedAt      DateTime @updatedAt
+}
+
+/// 用户优惠券（券发放到人）。
+///
+/// 为什么需要：原来 Coupon 不与用户绑定，用户只能在结算页手输券码，
+/// 没有任何"我的优惠券"入口。后台发券 → 用户账户页看到券 → 结算页直接选。
+model UserCoupon {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  couponId  String
+  coupon    Coupon    @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  /// 状态：available（未使用）| used（已使用）| expired（已过期）
+  status    String    @default("available")
+  /// 使用该券的订单
+  usedOrderNo String?
+  /// 发放来源：admin（后台发放）| auto（消费返券）| event（活动领取）
+  source    String    @default("admin")
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+  expiresAt DateTime?
+
+  @@index([userId, status])
+  @@index([couponId])
 }
 
 // ---------------- 促销 / 评价 / 物流 ----------------
@@ -205,6 +308,7 @@ model Coupon {
   usageLimit Int?
   usedCount  Int       @default(0)
   active     Boolean   @default(true)
+  userCoupons UserCoupon[]
 }
 
 model Review {

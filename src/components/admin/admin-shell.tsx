@@ -29,6 +29,7 @@ export function AdminShell({
     { href: '/admin/orders', label: t.orders },
     { href: '/admin/consultations', label: 'Kakao 咨询' },
     { href: '/admin/coupons', label: t.coupons },
+    { href: '/admin/points', label: '积分设置' },
     { href: '/admin/newsletter', label: '订阅列表' },
     { href: '/admin/customers', label: t.customers },
     { href: '/admin/banners', label: t.banners },

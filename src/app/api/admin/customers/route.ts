@@ -18,6 +18,7 @@ export async function GET() {
     name: u.name,
     email: u.email,
     createdAt: u.createdAt,
+    points: u.points,
     orderCount: u.orders.length,
     spent: u.orders.reduce((sum, o) => sum + o.total, 0),
   }));

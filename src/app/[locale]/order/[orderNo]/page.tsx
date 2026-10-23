@@ -127,6 +127,10 @@ export default async function OrderDetailPage({
             )}
             <div className="min-w-0 flex-1">
               <p className="text-ink truncate">{it.name}</p>
+              {/* 规格快照：下单当时选的尺码/颜色，历史订单永久保留 */}
+              {it.skuLabel && (
+                <p className="text-xs text-ink-soft mt-0.5">{it.skuLabel}</p>
+              )}
               <p className="text-xs text-muted mt-0.5">
                 {formatPrice(it.price, loc)} × {it.quantity}
               </p>
@@ -164,6 +168,18 @@ export default async function OrderDetailPage({
               <span className="text-accent">−{formatPrice(order.discount, loc)}</span>
             </div>
           )}
+          {order.pointsDiscount > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted">
+                {loc === 'zh'
+                  ? `积分抵扣（${order.pointsUsed.toLocaleString()} 分）`
+                  : loc === 'en'
+                    ? `Points used (${order.pointsUsed.toLocaleString()})`
+                    : `포인트 사용 (${order.pointsUsed.toLocaleString()}P)`}
+              </span>
+              <span className="text-accent">−{formatPrice(order.pointsDiscount, loc)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted">{t.shippingFeeLabel}</span>
             <span>{formatPrice(order.shippingFee, loc)}</span>
@@ -175,6 +191,15 @@ export default async function OrderDetailPage({
               {formatPrice(order.total, loc)}
             </span>
           </div>
+          {order.pointsEarned > 0 && (
+            <p className="text-xs text-accent text-right mt-1">
+              {loc === 'zh'
+                ? `本单获得 ${order.pointsEarned.toLocaleString()} 积分`
+                : loc === 'en'
+                  ? `Earned ${order.pointsEarned.toLocaleString()} points`
+                  : `${order.pointsEarned.toLocaleString()}P 적립`}
+            </p>
+          )}
         </div>
       </div>
     </div>

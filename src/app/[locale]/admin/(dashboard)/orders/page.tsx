@@ -42,9 +42,20 @@ type OrderRow = {
   carrier: string | null;
   contacted: boolean;
   createdAt: string;
+  pointsUsed: number;
+  pointsDiscount: number;
+  pointsEarned: number;
   user: { id: string; email: string; name: string | null } | null;
   address: AddressRow;
-  items: { id: string; name: string; price: number; quantity: number }[];
+  items: {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+    skuLabel: string | null;
+    options: string | null;
+    skuCode?: string | null;
+  }[];
 };
 
 export default function AdminOrdersPage() {
@@ -208,6 +219,17 @@ export default function AdminOrdersPage() {
                 <span className="font-display text-lg w-28 text-right">
                   {formatPrice(o.total, 'ko')}
                 </span>
+                {/* 积分标记 */}
+                {(o.pointsUsed > 0 || o.pointsEarned > 0) && (
+                  <span
+                    className="text-[10px] px-2 py-1 border border-accent/40 text-accent whitespace-nowrap"
+                    title={`用 ${o.pointsUsed} 分抵扣 ${o.pointsDiscount}₩ · 赠送 ${o.pointsEarned} 分`}
+                  >
+                    {o.pointsUsed > 0 ? `积分 -${o.pointsUsed.toLocaleString()}` : ''}
+                    {o.pointsUsed > 0 && o.pointsEarned > 0 ? ' / ' : ''}
+                    {o.pointsEarned > 0 ? `返 +${o.pointsEarned.toLocaleString()}` : ''}
+                  </span>
+                )}
                 {/* 已联系标记 */}
                 <button
                   onClick={() => toggleContacted(o)}
@@ -275,6 +297,7 @@ export default function AdminOrdersPage() {
                       <thead>
                         <tr className="text-muted text-left">
                           <th className="py-1 font-normal">商品</th>
+                          <th className="py-1 font-normal">规格（尺码/颜色）</th>
                           <th className="py-1 font-normal">单价</th>
                           <th className="py-1 font-normal">数量</th>
                           <th className="py-1 font-normal">小计</th>
@@ -284,6 +307,9 @@ export default function AdminOrdersPage() {
                         {o.items.map((it) => (
                           <tr key={it.id} className="border-t border-line">
                             <td className="py-1.5 pr-2">{it.name}</td>
+                            <td className="py-1.5 pr-2 text-ink-soft">
+                              {it.skuLabel || <span className="text-muted">—</span>}
+                            </td>
                             <td className="py-1.5">{formatPrice(it.price, 'ko')}</td>
                             <td className="py-1.5">×{it.quantity}</td>
                             <td className="py-1.5">
@@ -308,9 +334,32 @@ export default function AdminOrdersPage() {
                         '未使用'
                       )}
                     </p>
+                    {o.pointsUsed > 0 && (
+                      <p>
+                        积分抵扣：使用{' '}
+                        <span className="text-accent font-medium">
+                          {o.pointsUsed.toLocaleString()} 分
+                        </span>
+                        ，抵现金{' '}
+                        <span className="text-accent">
+                          -{formatPrice(o.pointsDiscount, 'ko')}
+                        </span>
+                      </p>
+                    )}
+                    {o.pointsEarned > 0 && (
+                      <p>
+                        本单赠送积分：
+                        <span className="text-emerald-600 font-medium">
+                          {o.pointsEarned.toLocaleString()} 分
+                        </span>
+                      </p>
+                    )}
                     <p>
                       小计 {formatPrice(o.subtotal, 'ko')}
-                      {o.discount > 0 && ` · 优惠 -${formatPrice(o.discount, 'ko')}`} · 运费{' '}
+                      {o.discount > 0 && ` · 优惠 -${formatPrice(o.discount, 'ko')}`}
+                      {o.pointsDiscount > 0 &&
+                        ` · 积分抵扣 -${formatPrice(o.pointsDiscount, 'ko')}`}{' '}
+                      · 运费{' '}
                       {o.shippingFee > 0 ? formatPrice(o.shippingFee, 'ko') : '免运费'} · 实付{' '}
                       <b className="text-ink">{formatPrice(o.total, 'ko')}</b>
                     </p>

@@ -32,6 +32,17 @@ export type ProductInput = {
   images?: string[];
   skus?: AdminSkuInput[];
   specs?: AdminSpecInput[];
+  // ---- 积分配置 ----
+  /** 是否参与消费返积分 */
+  earnPoints?: boolean;
+  /** 返积分方式：percent（按实付百分比）| fixed（按件固定返） */
+  earnType?: string;
+  /** percent 时是百分比整数（0 = 跟随全局）；fixed 时是每件返多少积分 */
+  earnValue?: number;
+  /** 是否允许用积分抵扣 */
+  usePoints?: boolean;
+  /** 该商品单笔最多可用积分数（0 = 不限） */
+  maxPointUse?: number;
 };
 
 function slugBase(input: string): string {
@@ -100,6 +111,20 @@ export async function getCategories() {
   return prisma.category.findMany({ orderBy: { sortOrder: 'asc' } });
 }
 
+/** 把积分配置规整成合法值 */
+function pointConfigOf(data: ProductInput) {
+  const earnType = data.earnType === 'fixed' ? 'fixed' : 'percent';
+  const earnValue = Math.max(0, Math.floor(Number(data.earnValue) || 0));
+  const maxPointUse = Math.max(0, Math.floor(Number(data.maxPointUse) || 0));
+  return {
+    earnPoints: data.earnPoints !== false,
+    earnType,
+    earnValue,
+    usePoints: data.usePoints !== false,
+    maxPointUse,
+  };
+}
+
 export async function createProduct(data: ProductInput) {
   const slug = await uniqueSlug(slugBase(data.code || data.name));
   const skus = (data.skus ?? []).map((s, i) => ({
@@ -132,6 +157,7 @@ export async function createProduct(data: ProductInput) {
       tags: JSON.stringify(data.tags ?? []),
       status: data.status || 'draft',
       images: JSON.stringify(data.images ?? []),
+      ...pointConfigOf(data),
       skus: { create: skus },
       specs: { create: specs },
     },
@@ -196,6 +222,7 @@ export async function updateProduct(id: string, data: ProductInput) {
       tags: JSON.stringify(data.tags ?? []),
       status: data.status || 'draft',
       images: JSON.stringify(data.images ?? []),
+      ...pointConfigOf(data),
     },
     include: { skus: true, specs: { orderBy: { order: 'asc' } } },
   });
