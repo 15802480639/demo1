@@ -319,6 +319,9 @@ export async function reverseOrderPoints(
   });
   if (existing) return { deducted: 0, refunded: 0 };
 
+  // 收回本单赠送但未使用的优惠券（幂等：updateMany 可重复执行）
+  await revokeGrantedCoupons(orderId);
+
   const label = reason === 'refund' ? '退款' : '取消';
   let deducted = 0;
   let refunded = 0;
@@ -348,5 +351,86 @@ export async function reverseOrderPoints(
   }
 
   return { deducted, refunded };
+}
+
+/**
+ * 订单支付成功后发放「商品赠送优惠券」。
+ *
+ * 规则：商品里配了 grantCouponIds 的，用户买这个单（含该商品）就自动得券，
+ * 进「我的优惠券」。与积分系统解耦 —— 积分总开关关掉不影响发券。
+ *
+ * 幂等：同一订单 + 同一张券只发一次（靠 grantedByOrder 查重）。
+ */
+export async function grantCouponsForOrder(orderId: string): Promise<string[]> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, userId: true, orderNo: true, items: { select: { productId: true } } },
+  });
+  if (!order || order.items.length === 0) return [];
+
+  const products = await prisma.product.findMany({
+    where: { id: { in: order.items.map((i) => i.productId) } },
+    select: { grantCouponIds: true },
+  });
+
+  // 收集本单要赠的券（去重）
+  const wanted = new Set<string>();
+  for (const p of products) {
+    let ids: string[] = [];
+    try {
+      const parsed = JSON.parse(p.grantCouponIds || '[]');
+      if (Array.isArray(parsed)) ids = parsed.filter((x) => typeof x === 'string');
+    } catch {
+      // 解析失败按无赠送
+    }
+    for (const id of ids) wanted.add(id);
+  }
+  if (wanted.size === 0) return [];
+
+  // 只发「存在且启用」的券；过期券跳过
+  const coupons = await prisma.coupon.findMany({
+    where: { id: { in: [...wanted] }, active: true },
+    select: { id: true, code: true, expiresAt: true },
+  });
+  if (coupons.length === 0) return [];
+
+  const granted: string[] = [];
+  for (const c of coupons) {
+    // 幂等：同一订单已发过这张券就跳过
+    const dup = await prisma.userCoupon.findFirst({
+      where: { userId: order.userId, couponId: c.id, grantedByOrder: order.orderNo },
+      select: { id: true },
+    });
+    if (dup) continue;
+    await prisma.userCoupon.create({
+      data: {
+        userId: order.userId,
+        couponId: c.id,
+        status: 'available',
+        source: 'auto',
+        grantedByOrder: order.orderNo,
+        expiresAt: c.expiresAt ?? null,
+      },
+    });
+    granted.push(c.code);
+  }
+  return granted;
+}
+
+/**
+ * 退款/取消时收回本单赠送、但还没用的券。
+ * 已使用的券不收回（用户确实用掉了，收回会造成坏账）。
+ */
+export async function revokeGrantedCoupons(orderId: string): Promise<number> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { orderNo: true },
+  });
+  if (!order) return 0;
+  const r = await prisma.userCoupon.updateMany({
+    where: { grantedByOrder: order.orderNo, status: 'available' },
+    data: { status: 'revoked' },
+  });
+  return r.count;
 }
 

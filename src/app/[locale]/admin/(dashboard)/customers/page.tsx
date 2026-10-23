@@ -133,7 +133,8 @@ export default function AdminCustomersPage() {
       <div className="mb-4">
         <h1 className="font-display text-3xl text-ink">客户管理</h1>
         <p className="text-xs text-muted mt-1">
-          搜索客户邮箱或昵称，点「订单管理」查看该客户名下的订单列表和订单详情。点积分数字可手动增减积分。
+          搜索客户邮箱或昵称，点「订单管理」查看该客户名下的订单列表和订单详情。点积分旁的「✎
+          调整」可手动增减积分，点「发放优惠券」可直接送券到客户账户。
         </p>
       </div>
 
@@ -169,14 +170,25 @@ export default function AdminCustomersPage() {
               <span className="text-sm w-20 text-center text-muted">
                 {c.orderCount} 单
               </span>
-              <button
-                onClick={() => openPointEditor(c)}
-                className="text-sm w-24 text-right hover:text-accent"
-                title="点击手动增减积分"
-              >
-                <span className="text-accent">{c.points.toLocaleString()}</span>
-                <span className="text-[10px] text-muted ml-1">分</span>
-              </button>
+              <div className="flex items-center justify-end gap-2 w-40">
+                <button
+                  onClick={() => openPointEditor(c)}
+                  className="text-sm hover:opacity-70 flex items-baseline gap-1"
+                  title="点击手动增减积分"
+                >
+                  <span className="text-accent font-display text-base">
+                    {c.points.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] text-muted">分</span>
+                </button>
+                <button
+                  onClick={() => openPointEditor(c)}
+                  className="text-xs px-2 py-1 border border-line hover:border-accent text-accent whitespace-nowrap"
+                  title="手动增加或扣减积分"
+                >
+                  ✎ 调整
+                </button>
+              </div>
               <span className="font-display text-lg w-32 text-right">
                 {formatPrice(c.spent, 'ko')}
               </span>

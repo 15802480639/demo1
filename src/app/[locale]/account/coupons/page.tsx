@@ -40,6 +40,7 @@ export default function AccountCouponsPage() {
       used: '已使用',
       expired: '已过期',
       pending: '未生效',
+      revoked: '已收回',
       code: '券码',
       empty: '你还没有优惠券。',
       back: '← 返回账户',
@@ -53,6 +54,7 @@ export default function AccountCouponsPage() {
       used: 'Used',
       expired: 'Expired',
       pending: 'Not started',
+      revoked: 'Revoked',
       code: 'Code',
       empty: 'You have no coupons yet.',
       back: '← Account',
@@ -66,6 +68,7 @@ export default function AccountCouponsPage() {
       used: '사용 완료',
       expired: '만료됨',
       pending: '시작 전',
+      revoked: '회수됨',
       code: '쿠폰 코드',
       empty: '쿠폰이 없습니다.',
       back: '← 계정으로',
@@ -73,13 +76,23 @@ export default function AccountCouponsPage() {
   }[locale];
 
   const statusLabel = (s: string) =>
-    s === 'used' ? t.used : s === 'expired' ? t.expired : s === 'pending' ? t.pending : t.available;
+    s === 'used'
+      ? t.used
+      : s === 'expired'
+        ? t.expired
+        : s === 'pending'
+          ? t.pending
+          : s === 'revoked'
+            ? t.revoked
+            : t.available;
   const statusCls = (s: string) =>
     s === 'available'
       ? 'border-emerald-300 text-emerald-700'
-      : s === 'used'
-        ? 'border-line text-muted'
-        : 'border-line text-muted/60';
+      : s === 'revoked'
+        ? 'border-red-300 text-red-600'
+        : s === 'used'
+          ? 'border-line text-muted'
+          : 'border-line text-muted/60';
 
   return (
     <div className="mx-auto max-w-[900px] px-4 sm:px-8 py-12">

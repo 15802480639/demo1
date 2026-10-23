@@ -43,8 +43,24 @@ type ProductRow = {
   earnValue: number;
   usePoints: boolean;
   maxPointUse: number;
+  // 购买赠送的优惠券 ID（JSON 数组字符串）
+  grantCouponIds: string;
 };
 type Option = { id: string; name: string };
+type CouponOption = { id: string; code: string; type: string; value: number };
+
+/** 把商品上配的赠券 ID 解析成券码（用于列表展示） */
+function grantedCouponCodes(grantCouponIds: string, coupons: CouponOption[]): string[] {
+  try {
+    const ids = JSON.parse(grantCouponIds || '[]');
+    if (!Array.isArray(ids)) return [];
+    return ids
+      .map((id) => coupons.find((c) => c.id === id)?.code)
+      .filter((x): x is string => !!x);
+  } catch {
+    return [];
+  }
+}
 
 function firstImage(images: string): string | null {
   try {
@@ -95,6 +111,7 @@ export default function AdminProductsPage() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [brands, setBrands] = useState<Option[]>([]);
   const [categories, setCategories] = useState<Option[]>([]);
+  const [coupons, setCoupons] = useState<CouponOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ProductRow | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -108,11 +125,16 @@ export default function AdminProductsPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch('/api/admin/products');
+    const [res, cRes] = await Promise.all([
+      fetch('/api/admin/products'),
+      fetch('/api/admin/coupons'),
+    ]);
     const data = await res.json();
+    const cData = cRes.ok ? await cRes.json().catch(() => ({})) : {};
     setProducts(data.products ?? []);
     setBrands(data.brands ?? []);
     setCategories(data.categories ?? []);
+    setCoupons(cData.coupons ?? []);
     setLoading(false);
   }
   useEffect(() => {
@@ -223,6 +245,8 @@ export default function AdminProductsPage() {
                   <p className="text-xs text-muted">
                     {p.code || '—'} · {p.brand?.name ?? '—'} · {p.category?.name ?? '—'} ·{' '}
                     {p.skus.length} 个规格
+                    {grantedCouponCodes(p.grantCouponIds, coupons).length > 0 &&
+                      ` · 赠券 ${grantedCouponCodes(p.grantCouponIds, coupons).join('、')}`}
                   </p>
                   <p className="text-[11px] text-muted mt-0.5">
                     积分：
@@ -299,6 +323,7 @@ export default function AdminProductsPage() {
           editing={editing}
           brands={brands}
           categories={categories}
+          coupons={coupons}
           onClose={() => setShowForm(false)}
           onSaved={() => {
             setShowForm(false);
@@ -314,12 +339,14 @@ function ProductForm({
   editing,
   brands,
   categories,
+  coupons,
   onClose,
   onSaved,
 }: {
   editing: ProductRow | null;
   brands: Option[];
   categories: Option[];
+  coupons: CouponOption[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -392,6 +419,16 @@ function ProductForm({
   const [maxPointUse, setMaxPointUse] = useState(
     editing?.maxPointUse ? String(editing.maxPointUse) : '',
   );
+
+  // ---- 购买赠送优惠券 ----
+  const [grantCouponIds, setGrantCouponIds] = useState<string[]>(() => {
+    try {
+      const arr = JSON.parse(editing?.grantCouponIds ?? '[]');
+      return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
 
   function addSku() {
     setSkus((s) => [...s, { options: {}, stock: 0, price: '' }]);
@@ -520,6 +557,8 @@ function ProductForm({
       earnValue: earnValue === '' ? 0 : Number(earnValue),
       usePoints,
       maxPointUse: maxPointUse === '' ? 0 : Number(maxPointUse),
+      // 购买赠送优惠券
+      grantCouponIds,
       skus: skus.map((s) => ({
         id: s.id,
         options: s.options,
@@ -733,6 +772,47 @@ function ProductForm({
               </div>
             )}
           </div>
+        </div>
+
+        {/* ---------- 购买赠送优惠券 ---------- */}
+        <div className="border border-line p-4 space-y-3">
+          <div>
+            <h3 className="font-display text-lg text-ink">购买赠送优惠券</h3>
+            <p className="text-[11px] text-muted mt-1">
+              勾选后，客户购买本商品且订单支付成功，这张券会自动发到客户账户的「我的优惠券」里，结算时可直接用。不勾 = 不赠送。
+            </p>
+          </div>
+          {coupons.length === 0 ? (
+            <p className="text-xs text-muted">
+              还没有创建优惠券 —— 请先在「优惠券」页创建，再回到这里勾选。
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              {coupons.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex items-center gap-2 cursor-pointer hover:bg-surface-2 px-1 py-1"
+                >
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4"
+                    checked={grantCouponIds.includes(c.id)}
+                    onChange={(e) =>
+                      setGrantCouponIds((ids) =>
+                        e.target.checked ? [...ids, c.id] : ids.filter((x) => x !== c.id),
+                      )
+                    }
+                  />
+                  <span className="text-sm text-ink font-medium">{c.code}</span>
+                  <span className="text-xs text-muted">
+                    {c.type === 'percent'
+                      ? `打折 ${c.value}%`
+                      : `立减 ₩${c.value.toLocaleString()}`}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

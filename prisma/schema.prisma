@@ -107,6 +107,8 @@ model Product {
   usePoints      Boolean        @default(true)
   /// 该商品用积分抵扣时的「最多可抵扣积分上限」。0 = 不单独限制，跟随全局上限
   maxPointUse    Int            @default(0)
+  /// 购买该商品赠送的优惠券 ID 列表（JSON 数组）。订单支付成功后自动发到用户账户
+  grantCouponIds String         @default("[]")
   skus           Sku[]
   specs          ProductSpec[]
   reviews        Review[]
@@ -286,6 +288,8 @@ model UserCoupon {
   usedOrderNo String?
   /// 发放来源：admin（后台发放）| auto（消费返券）| event（活动领取）
   source    String    @default("admin")
+  /// 自动发券时记录赠送订单号（退款时按此收回未使用的券；同一订单不会重复发）
+  grantedByOrder String?
   createdAt DateTime  @default(now())
   usedAt    DateTime?
   expiresAt DateTime?

@@ -9,6 +9,7 @@ import {
   pointsToDiscount,
   adjustPoints,
   reverseOrderPoints,
+  grantCouponsForOrder,
 } from '@/lib/points';
 
 export type OrderInputItem = {
@@ -529,7 +530,7 @@ export async function getOrderByNo(orderNo: string, userId?: string) {
 }
 
 export async function getAdminOrders(take = 200, userId?: string) {
-  return prisma.order.findMany({
+  const orders = await prisma.order.findMany({
     where: userId ? { userId } : undefined,
     orderBy: { createdAt: 'desc' },
     take,
@@ -539,6 +540,25 @@ export async function getAdminOrders(take = 200, userId?: string) {
       address: true,
     },
   });
+  if (!orders.length) return orders;
+
+  // 附带「本单赠送的优惠券」信息（商品赠券功能，按订单号关联）
+  const granted = await prisma.userCoupon.findMany({
+    where: { grantedByOrder: { in: orders.map((o) => o.orderNo) } },
+    select: {
+      grantedByOrder: true,
+      status: true,
+      coupon: { select: { code: true } },
+    },
+  });
+  const map = new Map<string, { code: string; status: string }[]>();
+  for (const g of granted) {
+    if (!g.grantedByOrder) continue;
+    const arr = map.get(g.grantedByOrder) ?? [];
+    arr.push({ code: g.coupon.code, status: g.status });
+    map.set(g.grantedByOrder, arr);
+  }
+  return orders.map((o) => ({ ...o, grantedCoupons: map.get(o.orderNo) ?? [] }));
 }
 
 /**
@@ -584,6 +604,9 @@ export async function grantPointsForOrder(orderId: string): Promise<number> {
   });
   if (!order) return 0;
   if (order.pointsSettled) return 0; // 已发过
+
+  // 商品赠送优惠券：与积分总开关无关，支付成功就发（内部自带幂等查重）
+  await grantCouponsForOrder(orderId);
 
   const rule = await getPointRule();
   if (!rule.enabled) {

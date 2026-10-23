@@ -45,6 +45,8 @@ type OrderRow = {
   pointsUsed: number;
   pointsDiscount: number;
   pointsEarned: number;
+  /** 本单赠送的优惠券（商品赠券功能） */
+  grantedCoupons?: { code: string; status: string }[];
   user: { id: string; email: string; name: string | null } | null;
   address: AddressRow;
   items: {
@@ -334,24 +336,48 @@ export default function AdminOrdersPage() {
                         '未使用'
                       )}
                     </p>
-                    {o.pointsUsed > 0 && (
-                      <p>
-                        积分抵扣：使用{' '}
-                        <span className="text-accent font-medium">
-                          {o.pointsUsed.toLocaleString()} 分
-                        </span>
-                        ，抵现金{' '}
-                        <span className="text-accent">
-                          -{formatPrice(o.pointsDiscount, 'ko')}
-                        </span>
-                      </p>
-                    )}
-                    {o.pointsEarned > 0 && (
-                      <p>
-                        本单赠送积分：
+                    <p>
+                      积分抵扣：
+                      {o.pointsUsed > 0 ? (
+                        <>
+                          使用{' '}
+                          <span className="text-accent font-medium">
+                            {o.pointsUsed.toLocaleString()} 分
+                          </span>
+                          ，抵现金{' '}
+                          <span className="text-accent">
+                            -{formatPrice(o.pointsDiscount, 'ko')}
+                          </span>
+                        </>
+                      ) : (
+                        '未使用'
+                      )}
+                    </p>
+                    <p>
+                      本单赠送积分：
+                      {o.pointsEarned > 0 ? (
                         <span className="text-emerald-600 font-medium">
                           {o.pointsEarned.toLocaleString()} 分
                         </span>
+                      ) : (
+                        '无'
+                      )}
+                    </p>
+                    {(o.grantedCoupons?.length ?? 0) > 0 && (
+                      <p>
+                        本单赠送优惠券：
+                        {o.grantedCoupons!.map((g, i) => (
+                          <span key={`${g.code}-${i}`}>
+                            {i > 0 && '、'}
+                            <span className="text-ink font-medium">{g.code}</span>
+                            {g.status === 'revoked' && (
+                              <span className="text-muted">（已收回）</span>
+                            )}
+                            {g.status === 'used' && (
+                              <span className="text-muted">（已使用）</span>
+                            )}
+                          </span>
+                        ))}
                       </p>
                     )}
                     <p>

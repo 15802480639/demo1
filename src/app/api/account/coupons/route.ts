@@ -44,11 +44,13 @@ export async function GET() {
       const status =
         r.status === 'used'
           ? 'used'
-          : couponExpired
-            ? 'expired'
-            : notStarted
-              ? 'pending'
-              : 'available';
+          : r.status === 'revoked'
+            ? 'revoked'
+            : couponExpired
+              ? 'expired'
+              : notStarted
+                ? 'pending'
+                : 'available';
       return {
         id: r.id,
         code: c.code,
@@ -57,6 +59,8 @@ export async function GET() {
         minSpend: c.minSpend,
         productIds: c.productIds,
         status,
+        source: r.source,
+        grantedByOrder: r.grantedByOrder,
         expiresAt: r.expiresAt ?? c.expiresAt,
         usedOrderNo: r.usedOrderNo,
         createdAt: r.createdAt,

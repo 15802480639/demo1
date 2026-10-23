@@ -43,7 +43,22 @@ export type ProductInput = {
   usePoints?: boolean;
   /** 该商品单笔最多可用积分数（0 = 不限） */
   maxPointUse?: number;
+  /** 购买本商品赠送的优惠券 ID 列表（支付成功后自动发到客户账户） */
+  grantCouponIds?: string[];
 };
+
+/** 把赠送券配置规整成 JSON：只保留真实存在的券 ID */
+async function grantCouponIdsOf(data: ProductInput): Promise<string> {
+  const ids = Array.isArray(data.grantCouponIds)
+    ? data.grantCouponIds.filter((x) => typeof x === 'string' && x)
+    : [];
+  if (ids.length === 0) return '[]';
+  const found = await prisma.coupon.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  return JSON.stringify(found.map((c) => c.id));
+}
 
 function slugBase(input: string): string {
   return input
@@ -158,6 +173,7 @@ export async function createProduct(data: ProductInput) {
       status: data.status || 'draft',
       images: JSON.stringify(data.images ?? []),
       ...pointConfigOf(data),
+      grantCouponIds: await grantCouponIdsOf(data),
       skus: { create: skus },
       specs: { create: specs },
     },
@@ -173,15 +189,22 @@ export async function updateProduct(id: string, data: ProductInput) {
 
   for (const [i, s] of incoming.entries()) {
     const payload = {
-      skuCode: s.id ? skuCodeFor(data.code, s, i) : `${skuCodeFor(data.code, s, i)}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
       options: JSON.stringify(optionsFor(s)),
       stock: s.stock ?? 0,
       price: s.price ?? null,
     };
     if (s.id) {
+      // 已有 SKU：只更新选项/库存/价格，skuCode 保持不变
+      // （重新生成会撞唯一约束，且货号本该由建品时决定）
       await prisma.sku.update({ where: { id: s.id }, data: payload });
     } else {
-      await prisma.sku.create({ data: { ...payload, productId: id } });
+      await prisma.sku.create({
+        data: {
+          ...payload,
+          productId: id,
+          skuCode: `${skuCodeFor(data.code, s, i)}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
+        },
+      });
     }
   }
   // 删除被移除的 SKU
@@ -223,6 +246,10 @@ export async function updateProduct(id: string, data: ProductInput) {
       status: data.status || 'draft',
       images: JSON.stringify(data.images ?? []),
       ...pointConfigOf(data),
+      // 赠券配置：前端传来才覆盖（不传 = 保持原样）
+      ...(data.grantCouponIds !== undefined
+        ? { grantCouponIds: await grantCouponIdsOf(data) }
+        : {}),
     },
     include: { skus: true, specs: { orderBy: { order: 'asc' } } },
   });

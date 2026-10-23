@@ -306,6 +306,28 @@ function finish() {
     console.log('\n失败项：');
     for (const f of failed) console.log(`  ❌ ${f.name} — ${f.detail}`);
   }
+  // ⚠️ 恢复全局积分规则为生产默认值（本脚本为了好测试改低了门槛，
+  //    不恢复会污染线上配置 —— 2026-10-23 踩过这个坑）
+  try {
+    jar.clear();
+    await req('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: ADMIN.email, password: ADMIN.password }),
+    });
+    await req('/api/admin/points', {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled: true,
+        earnPercent: 5,
+        minSpendForUse: 50000,
+        pointsPerKrw: 100,
+        maxUsePercent: 30,
+      }),
+    });
+    console.log('已恢复默认积分规则（返 5% / 满 50,000₩ / 100 积分=1₩ / 抵 30%）');
+  } catch {
+    console.log('⚠️ 默认规则恢复失败，请手动到 /admin/points 改回');
+  }
   process.exit(failed.length ? 1 : 0);
 }
 
