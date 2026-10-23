@@ -122,26 +122,42 @@ done
 # ⚠️ 瘦身：Prisma 7 的 query compiler 按数据库方言各带一份 wasm，
 #   每种约 15M（mysql / sqlite / cockroachdb / sqlserver / postgresql）。
 #   生产只用 PostgreSQL → 剔掉其余四种，省约 60M。
+#
+# ⚠️ 两个路径都要扫（2026-10-23 实测踩坑）：
+#   Next 16 的 tracing 可能把 @prisma 放在 .next/standalone/node_modules/ 下，
+#   也可能放在 .next/standalone/.next/node_modules/ 下 —— 只扫一个会漏，
+#   结果 standalone 体积从 180M 涨到 238M、tar 从 57M 涨到 83M。
 log "剔除 Prisma 非 PostgreSQL 方言的 query compiler"
-for d in ".next/standalone/.next/node_modules/@prisma"/*/runtime; do
-  [[ -d "$d" ]] || continue
-  for f in "$d"/query_compiler_*.wasm-base64.*; do
-    [[ -f "$f" ]] || continue
-    case "$f" in
-      *postgresql*) ;;
-      *) rm -f "$f" 2>/dev/null || true ;;
-    esac
-  done
-  # 同样精简非 pg 的方言 js（体积小，顺手清）
-  for f in "$d"/query_compiler_*.js "$d"/query_compiler_*.mjs; do
-    [[ -f "$f" ]] || continue
-    case "$f" in
-      *postgresql*) ;;
-      *) rm -f "$f" 2>/dev/null || true ;;
-    esac
+for base in ".next/standalone" ".next/standalone/.next"; do
+  for d in "$base"/node_modules/@prisma/*/runtime; do
+    [[ -d "$d" ]] || continue
+    # query_compiler_<方言>.wasm-base64.{js,mjs} 与 query_compiler_fast_bg.<方言>.wasm-base64.{js,mjs}
+    for f in "$d"/query_compiler_*.wasm-base64.*; do
+      [[ -f "$f" ]] || continue
+      case "$f" in
+        *postgresql*) ;;
+        *) rm -f "$f" 2>/dev/null || true ;;
+      esac
+    done
+    # 同样精简非 pg 的方言 js（体积小，顺手清）
+    for f in "$d"/query_compiler_*.js "$d"/query_compiler_*.mjs; do
+      [[ -f "$f" ]] || continue
+      case "$f" in
+        *postgresql*) ;;
+        *) rm -f "$f" 2>/dev/null || true ;;
+      esac
+    done
   done
 done
 ok "Prisma 方言精简完成"
+
+# ⚠️ 清理 Windows 平台引擎（生产是 Linux，schema-engine-windows.exe 用不上）
+log "剔除 Windows 平台引擎"
+find .next/standalone/node_modules/@prisma -type f \
+  \( -name "*.exe" -o -name "*.dll" \) 2>/dev/null | while read -r f; do
+  rm -f "$f" 2>/dev/null || true
+done
+ok "Windows 平台引擎已清理"
 
 # standalone 里的 uploads 是运行时上传目录，清掉避免把旧图打包进去
 rm -rf .next/standalone/public/uploads 2>/dev/null || true
