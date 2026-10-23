@@ -12,6 +12,13 @@ const nextConfig: NextConfig = {
   //   "Can't resolve './ROOT/node_modules/vm2'"，构建必失败。
   // 外置后由 Node 在运行时从 node_modules require，standalone 产物会自动带上。
   serverExternalPackages: ["ali-oss", "proxy-agent"],
+  // ⚠️ outputFileTracingRoot 必须显式指定为项目根。
+  //   Next 16 对外置模块（serverExternalPackages）会在
+  //   .next/standalone/.next/node_modules/ 下生成 **符号链接** 指向本机绝对路径，
+  //   打包上传到服务器后必然断链（实测报
+  //   "Failed to load external module @prisma/client-<hash>: Cannot find module"）。
+  //   指定 root 后链接指向 standalone 内部相对位置，随包走。
+  outputFileTracingRoot: __dirname,
   // 排除与运行时无关的目录，缩小 tracing 范围（降低构建内存峰值与 standalone 产物体积）。
   // 注意：public 仍会在部署时整目录复制到 standalone，不影响 /uploads 静态图访问。
   outputFileTracingExcludes: {

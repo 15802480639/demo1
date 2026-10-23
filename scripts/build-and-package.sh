@@ -62,6 +62,51 @@ for m in ali-oss proxy-agent vm2; do
   fi
 done
 
+# ⚠️⚠️ 关键：把外置模块的符号链接换成真实目录
+# Next 16 对 serverExternalPackages 的模块，会在
+#   .next/standalone/.next/node_modules/<pkg>-<hash>
+# 生成**指向本机绝对路径**的符号链接（如 Windows 的 D:\LuoshenWorkspace\...）。
+# 打包上传到 Linux 服务器后链接必然断链 →
+#   "Failed to load external module @prisma/client-<hash>: Cannot find module"
+# 逐个把链接替换为目标目录的真实拷贝。
+log "修复外置模块的符号链接（改为真实目录）"
+FIXED=0
+while IFS= read -r link; do
+  target="$(readlink "$link" 2>/dev/null)" || continue
+  [[ -z "$target" ]] && continue
+  # Windows 绝对路径 → 换算成项目内的相对路径
+  rel="${target#*:/}"
+  rel="${rel//\\//}"
+  src="$PROJECT_DIR/$rel"
+  if [[ ! -d "$src" ]]; then
+    # 目标可能已经是相对路径或指向 node_modules 顶层
+    src="$target"
+  fi
+  if [[ -d "$src" ]]; then
+    tmp="${link}.real"
+    rm -rf "$tmp" 2>/dev/null || true
+    cp -rL "$src" "$tmp" 2>/dev/null || cp -r "$src" "$tmp" 2>/dev/null || true
+    if [[ -d "$tmp" ]]; then
+      rm -f "$link" 2>/dev/null || true
+      mv "$tmp" "$link" 2>/dev/null || true
+      echo "  ✓ $(basename "$link")"
+      FIXED=$((FIXED + 1))
+    fi
+  else
+    echo "  ! $(basename "$link") 目标不存在: $target"
+  fi
+done < <(find .next/standalone -type l 2>/dev/null)
+ok "已修复 $FIXED 个符号链接"
+
+# 修复后若仍有断链的链接，直接报告（部署前自查）
+BROKEN=$(find .next/standalone -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l)
+if [[ "$BROKEN" -gt 0 ]]; then
+  warn "仍有 $BROKEN 个断链符号链接："
+  find .next/standalone -type l ! -exec test -e {} \; -print 2>/dev/null | head -5
+else
+  ok "无断链符号链接"
+fi
+
 # ⚠️ 瘦身：这些包生产完全用不到，但 tracing 会一并带进来（占 80M+）
 #   @prisma/studio-core 43M（Prisma Studio 图形界面）
 #   @prisma/dev 19M（Prisma CLI 依赖）
@@ -73,6 +118,30 @@ for junk in "@prisma/studio-core" "@prisma/dev" "typescript" "tsx"; do
     mv ".next/standalone/node_modules/$junk" "/tmp/junk_$(basename "$junk")_$$" 2>/dev/null || true
   fi
 done
+
+# ⚠️ 瘦身：Prisma 7 的 query compiler 按数据库方言各带一份 wasm，
+#   每种约 15M（mysql / sqlite / cockroachdb / sqlserver / postgresql）。
+#   生产只用 PostgreSQL → 剔掉其余四种，省约 60M。
+log "剔除 Prisma 非 PostgreSQL 方言的 query compiler"
+for d in ".next/standalone/.next/node_modules/@prisma"/*/runtime; do
+  [[ -d "$d" ]] || continue
+  for f in "$d"/query_compiler_*.wasm-base64.*; do
+    [[ -f "$f" ]] || continue
+    case "$f" in
+      *postgresql*) ;;
+      *) rm -f "$f" 2>/dev/null || true ;;
+    esac
+  done
+  # 同样精简非 pg 的方言 js（体积小，顺手清）
+  for f in "$d"/query_compiler_*.js "$d"/query_compiler_*.mjs; do
+    [[ -f "$f" ]] || continue
+    case "$f" in
+      *postgresql*) ;;
+      *) rm -f "$f" 2>/dev/null || true ;;
+    esac
+  done
+done
+ok "Prisma 方言精简完成"
 
 # standalone 里的 uploads 是运行时上传目录，清掉避免把旧图打包进去
 rm -rf .next/standalone/public/uploads 2>/dev/null || true

@@ -368,6 +368,33 @@ else
   ok "OSS SDK 依赖已包含在 standalone 产物中"
 fi
 
+# ⚠️ 外置模块可加载性自检（2026-10-23 实测踩坑）：
+# Next 16 会给 serverExternalPackages 的模块生成 **指向本机绝对路径的符号链接**，
+# 打包上传后必然断链 → 运行时 "Failed to load external module @prisma/client-<hash>"。
+# 这里在启动前逐个检查，断链的直接用本地 node_modules 的实体目录替换。
+log "自检外置模块（修复断链符号链接）"
+FIXED_LINKS=0
+if [[ -d .next/standalone/.next/node_modules ]]; then
+  for link in .next/standalone/.next/node_modules/*; do
+    [[ -L "$link" ]] || continue
+    if [[ -e "$link" ]]; then
+      continue  # 链接有效，跳过
+    fi
+    # 断链：@prisma/client-<hash> → 找对应的真实包
+    base="$(basename "$link")"
+    pkg="${base%-*}"
+    if [[ -d "node_modules/$pkg" ]]; then
+      rm -f "$link" 2>/dev/null || true
+      cp -rL "node_modules/$pkg" "$link" 2>/dev/null || cp -r "node_modules/$pkg" "$link" 2>/dev/null || true
+      warn "修复断链: $base → 实体目录"
+      FIXED_LINKS=$((FIXED_LINKS + 1))
+    else
+      warn "断链且找不到替代: $base"
+    fi
+  done
+fi
+ok "外置模块自检完成（修复 $FIXED_LINKS 个）"
+
 # PM2 守护
 if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g pm2
