@@ -6,6 +6,12 @@ import type { NextConfig } from "next";
 // 目标服务器无需 npm install，直接 `node server.js` 即可运行。
 const nextConfig: NextConfig = {
   output: "standalone",
+  // ⚠️ ali-oss 必须外置（不参与打包）：
+  //   它的传递依赖 urllib 里 require('proxy-agent')，而 proxy-agent → vm2
+  //   带有非标准的预编译目录结构，Turbopack 打包器直接报
+  //   "Can't resolve './ROOT/node_modules/vm2'"，构建必失败。
+  // 外置后由 Node 在运行时从 node_modules require，standalone 产物会自动带上。
+  serverExternalPackages: ["ali-oss", "proxy-agent"],
   // 排除与运行时无关的目录，缩小 tracing 范围（降低构建内存峰值与 standalone 产物体积）。
   // 注意：public 仍会在部署时整目录复制到 standalone，不影响 /uploads 静态图访问。
   outputFileTracingExcludes: {

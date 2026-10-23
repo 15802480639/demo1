@@ -248,6 +248,28 @@ EOF
 else
   ok ".env 已存在，跳过（不覆盖）"
 fi
+
+# ---------- OSS 配置（ECS RAM Role 方式，服务器不存长期 AccessKey） ----------
+# 用 upsert 式追加：已存在同键则替换，不存在则追加，避免重复行。
+set_env() {
+  local key="$1" val="$2"
+  if grep -qE "^${key}=" .env 2>/dev/null; then
+    # 存在则就地替换（sed 分隔符用 |，值里可能含 /）
+    sed -i "s|^${key}=.*|${key}=${val}|" .env
+  else
+    printf '%s=%s\n' "$key" "$val" >> .env
+  fi
+}
+OSS_BUCKET="${OSS_BUCKET:-jd-oss}"
+OSS_REGION="${OSS_REGION:-oss-cn-hongkong}"
+OSS_ROLE_NAME="${OSS_ROLE_NAME:-JNDOSSImageRole}"
+OSS_PUBLIC_URL="${OSS_PUBLIC_URL:-https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com}"
+set_env "OSS_BUCKET" "$OSS_BUCKET"
+set_env "OSS_REGION" "$OSS_REGION"
+set_env "OSS_ROLE_NAME" "$OSS_ROLE_NAME"
+set_env "OSS_PUBLIC_URL" "$OSS_PUBLIC_URL"
+ok "OSS 配置就绪：${OSS_BUCKET} @ ${OSS_REGION}（RAM Role: ${OSS_ROLE_NAME}）"
+
 # 用 grep 逐行取，避免 source 触发 URL 里的特殊字符
 DB_URL="$(grep -E '^DATABASE_URL=' .env | head -1 | sed 's/^DATABASE_URL=//; s/^"//; s/"$//')"
 export DATABASE_URL="$DB_URL"
@@ -280,11 +302,29 @@ cp -r public .next/standalone/ 2>/dev/null || true
 mkdir -p .next/standalone/.next
 cp -r .next/static .next/standalone/.next/ 2>/dev/null || true
 
+# ⚠️ .env 必须同时放在 standalone 目录：
+# Next 的 standalone server.js 用 __dirname 定位 .env，而 process.chdir(__dirname)
+# 之后 cwd 变成 .next/standalone —— 只放项目根会导致运行时读不到 DATABASE_URL
+# （报 Prisma P1001）与 OSS 配置。
+cp -f .env .next/standalone/.env 2>/dev/null || true
+
 # 复制 prisma 引擎与 schema（standalone 运行期需要）
 mkdir -p .next/standalone/prisma
 cp prisma/schema.prisma .next/standalone/prisma/ 2>/dev/null || true
 cp -r node_modules/.prisma .next/standalone/node_modules/ 2>/dev/null || true
 cp -r node_modules/@prisma .next/standalone/node_modules/ 2>/dev/null || true
+
+# ali-oss 已通过 next.config.ts 的 serverExternalPackages 外置，
+# Next 的 tracing 会自动把 ali-oss / proxy-agent / vm2 打进 standalone。
+# 这里只做兜底检查，缺失则手动补（防止 tracing 行为变化导致运行时才崩）。
+if [[ ! -d ".next/standalone/node_modules/ali-oss" ]]; then
+  warn "standalone 产物缺少 ali-oss，手动补齐"
+  for m in ali-oss proxy-agent vm2; do
+    [[ -d "node_modules/$m" ]] && cp -r "node_modules/$m" ".next/standalone/node_modules/$m" 2>/dev/null || true
+  done
+else
+  ok "OSS SDK 依赖已包含在 standalone 产物中"
+fi
 
 # PM2 守护
 if ! command -v pm2 >/dev/null 2>&1; then
@@ -294,7 +334,12 @@ fi
 chown -R "$NODE_USER:$NODE_USER" "$APP_DIR"
 pm2 delete webshopp 2>/dev/null || true
 pm2 start .next/standalone/server.js --name webshopp \
-  --env PORT=3000 --env HOSTNAME=127.0.0.1 --time
+  --env PORT=3000 --env HOSTNAME=127.0.0.1 \
+  --env OSS_BUCKET="$OSS_BUCKET" \
+  --env OSS_REGION="$OSS_REGION" \
+  --env OSS_ROLE_NAME="$OSS_ROLE_NAME" \
+  --env OSS_PUBLIC_URL="$OSS_PUBLIC_URL" \
+  --time
 pm2 save
 pm2 startup systemd -u "$NODE_USER" --hp "/home/$NODE_USER" 2>/dev/null || true
 ok "PM2 已启动"
