@@ -283,24 +283,59 @@ ok "迁移完成（未重置数据）"
 
 # ---------- 8. 构建 + 守护 ----------
 log "8/8 构建并启动"
-# Node heap 上限按物理内存动态计算：留 1GB 给系统与 PostgreSQL，
-# 小内存机器（有 swap 兜底）至少给 1GB heap
-if [[ ${MEM_TOTAL_MB:-0} -gt 2048 ]]; then
-  HEAP_MB=$((MEM_TOTAL_MB - 1024))
-else
-  # 小内存机器：留约 390MB 给系统与 PostgreSQL，其余给 V8；
-  # 物理内存不够的部分由 4GB swap 兜底（换页变慢但不会失败）
-  HEAP_MB=1280
+# ⚠️ BUILD_ON_SERVER 默认为 0。
+# 这台机只有 1.7G 内存：服务器上跑 `next build` 会把内存+swap 吃满，
+# 表现为 SSH banner exchange 超时、HTTP 全无响应、整个系统僵死（2026-10-23 实测）。
+# 正确姿势：**本地构建好 standalone 产物 → 上传 → 服务器只做 npm ci + 启动**。
+BUILD_ON_SERVER="${BUILD_ON_SERVER:-0}"
+
+# 从上传的预构建产物包解出 .next/standalone
+if [[ -f /tmp/webshopp-standalone.tar.gz ]]; then
+  log "解出预构建产物 /tmp/webshopp-standalone.tar.gz"
+  # 旧产物先移走（不删，safe-delete 会拦批量删除）
+  if [[ -d .next ]]; then
+    mv .next ".next_stale_$(date +%s)"
+  fi
+  tar -xzf /tmp/webshopp-standalone.tar.gz -C .next 2>/dev/null \
+    || { mkdir -p .next && tar -xzf /tmp/webshopp-standalone.tar.gz -C .next; }
+  ok "预构建产物已就位"
 fi
-export NODE_OPTIONS="--max-old-space-size=${HEAP_MB}"
-log "构建内存策略：物理 ${MEM_TOTAL_MB:-?}MB → Node heap 上限 ${HEAP_MB}MB"
-npm run build
-ok "构建完成"
+
+if [[ "$BUILD_ON_SERVER" == "1" ]]; then
+  # Node heap 上限按物理内存动态计算：留 1GB 给系统与 PostgreSQL，
+  # 小内存机器（有 swap 兜底）至少给 1GB heap
+  if [[ ${MEM_TOTAL_MB:-0} -gt 2048 ]]; then
+    HEAP_MB=$((MEM_TOTAL_MB - 1024))
+  else
+    # 小内存机器：留约 390MB 给系统与 PostgreSQL，其余给 V8；
+    # 物理内存不够的部分由 4GB swap 兜底（换页变慢但不会失败）
+    HEAP_MB=1280
+  fi
+  export NODE_OPTIONS="--max-old-space-size=${HEAP_MB}"
+  log "构建内存策略：物理 ${MEM_TOTAL_MB:-?}MB → Node heap 上限 ${HEAP_MB}MB"
+  warn "服务器上构建 —— 小内存机器有卡死风险（建议 BUILD_ON_SERVER=0）"
+  npm run build
+  ok "构建完成"
+else
+  if [[ -d .next/standalone ]]; then
+    ok "检测到预构建产物 .next/standalone，跳过服务器端构建（省内存）"
+  else
+    warn "未找到 .next/standalone 且 BUILD_ON_SERVER=0 —— 无法启动！"
+    warn "请先在本地构建并上传产物，或设置 BUILD_ON_SERVER=1 强制在服务器构建"
+    die "缺少构建产物"
+  fi
+fi
 
 # standalone 产物需要手动补 public 与 static（Next 不会自动带）
-cp -r public .next/standalone/ 2>/dev/null || true
+# ⚠️ 用 rsync 语义（cp -r src dst/ 当 dst 已存在时会变成 dst/src）：
+# 目标已存在时逐项复制，确保 public/uploads 里的存量图正确落到 standalone。
+if [[ -d .next/standalone/public ]]; then
+  cp -r public/. .next/standalone/public/ 2>/dev/null || true
+else
+  cp -r public .next/standalone/ 2>/dev/null || true
+fi
 mkdir -p .next/standalone/.next
-cp -r .next/static .next/standalone/.next/ 2>/dev/null || true
+cp -r .next/static/. .next/standalone/.next/static/ 2>/dev/null || true
 
 # ⚠️ .env 必须同时放在 standalone 目录：
 # Next 的 standalone server.js 用 __dirname 定位 .env，而 process.chdir(__dirname)
@@ -309,10 +344,17 @@ cp -r .next/static .next/standalone/.next/ 2>/dev/null || true
 cp -f .env .next/standalone/.env 2>/dev/null || true
 
 # 复制 prisma 引擎与 schema（standalone 运行期需要）
+# ⚠️ 只补 .prisma（生成的 client）与 @prisma/client、@prisma/adapter-pg，
+# 不要整个拷贝 @prisma —— 里面含 studio-core(43M)/dev(19M) 等生产用不到的包。
 mkdir -p .next/standalone/prisma
 cp prisma/schema.prisma .next/standalone/prisma/ 2>/dev/null || true
 cp -r node_modules/.prisma .next/standalone/node_modules/ 2>/dev/null || true
-cp -r node_modules/@prisma .next/standalone/node_modules/ 2>/dev/null || true
+for m in "@prisma/client" "@prisma/adapter-pg" "@prisma/client-runtime-utils" "@prisma/get-platform" "@prisma/engines-version"; do
+  if [[ -d "node_modules/$m" && ! -d ".next/standalone/node_modules/$m" ]]; then
+    mkdir -p ".next/standalone/node_modules/$(dirname "$m")"
+    cp -r "node_modules/$m" ".next/standalone/node_modules/$m" 2>/dev/null || true
+  fi
+done
 
 # ali-oss 已通过 next.config.ts 的 serverExternalPackages 外置，
 # Next 的 tracing 会自动把 ali-oss / proxy-agent / vm2 打进 standalone。
