@@ -5,7 +5,6 @@ import { siteConfig } from '@/lib/site';
 import { JsonLd } from '@/components/seo/json-ld';
 import { HeroCarousel, type Banner } from '@/components/home/hero-carousel';
 import { ValueProps } from '@/components/home/value-props';
-import { CategorySplit } from '@/components/home/category-split';
 import { BrandWall } from '@/components/home/brand-wall';
 import { ProductSlider } from '@/components/home/product-slider';
 import { ProductCard } from '@/components/product/product-card';
@@ -92,8 +91,6 @@ export default async function HomePage({
       <HeroCarousel banners={banners} fallbackImages={fallbackImages} />
 
       <ValueProps items={dict.home.valueProps} />
-
-      <CategorySplit />
 
       {/* New arrivals */}
       <section className="mx-auto max-w-[1400px] px-4 sm:px-8 py-20 sm:py-24">

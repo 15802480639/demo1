@@ -130,8 +130,6 @@ export type Dict = {
     heroSlides: { eyebrow: string; title: string; subtitle: string; cta: string }[];
     newArrivals: string;
     newArrivalsSub: string;
-    shopMen: string;
-    shopWomen: string;
     brandsTitle: string;
     featuredTitle: string;
     featuredSub: string;
@@ -142,8 +140,6 @@ export type Dict = {
     valueProps: { title: string; desc: string }[];
     newInEyebrow: string;
     heroEyebrow: string;
-    collectionEyebrow: string;
-    shopCta: string;
     subscribeFailed: string;
   };
   footer: {
@@ -991,8 +987,6 @@ const ko: Dict = {
     ],
     newArrivals: '신상품',
     newArrivalsSub: '이번 시즌 가장 주목받는 아이템',
-    shopMen: '남성 쇼핑',
-    shopWomen: '여성 쇼핑',
     brandsTitle: '브랜드',
     featuredTitle: '추천 상품',
     featuredSub: '제이앤디가 엄선한 베스트 셀렉션',
@@ -1008,8 +1002,6 @@ const ko: Dict = {
     ],
     newInEyebrow: '신상품',
     heroEyebrow: '추천 컬렉션',
-    collectionEyebrow: '컬렉션',
-    shopCta: '쇼핑',
     subscribeFailed: '오류가 발생했습니다. 다시 시도해 주세요.',
   },
   footer: {
@@ -1829,8 +1821,6 @@ const zh: Dict = {
     ],
     newArrivals: '新品上市',
     newArrivalsSub: '本季最受瞩目的单品',
-    shopMen: '逛男装',
-    shopWomen: '逛女装',
     brandsTitle: '品牌',
     featuredTitle: '精选推荐',
     featuredSub: 'J&D 严选最佳系列',
@@ -1846,8 +1836,6 @@ const zh: Dict = {
     ],
     newInEyebrow: '新品上架',
     heroEyebrow: '精选推荐',
-    collectionEyebrow: '精选系列',
-    shopCta: '去逛逛',
     subscribeFailed: '提交失败，请重试',
   },
   footer: {
@@ -2668,8 +2656,6 @@ const en: Dict = {
     ],
     newArrivals: 'New Arrivals',
     newArrivalsSub: 'The most anticipated pieces this season',
-    shopMen: 'Shop Men',
-    shopWomen: 'Shop Women',
     brandsTitle: 'Brands',
     featuredTitle: 'Featured',
     featuredSub: 'J&D curated best selection',
@@ -2685,8 +2671,6 @@ const en: Dict = {
     ],
     newInEyebrow: 'New In',
     heroEyebrow: 'Featured Collection',
-    collectionEyebrow: 'Collection',
-    shopCta: 'Shop',
     subscribeFailed: 'Something went wrong. Please try again.',
   },
   footer: {
