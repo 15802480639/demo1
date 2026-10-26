@@ -67,6 +67,7 @@ export type Dict = {
     search: string;
     account: string;
     wishlist: string;
+    chatSupport: string;
   };
   common: {
     addToCart: string;
@@ -914,6 +915,7 @@ const ko: Dict = {
     search: '검색',
     account: '마이페이지',
     wishlist: '찜',
+    chatSupport: '채팅 상담',
   },
   common: {
     addToCart: '장바구니 담기',
@@ -1748,6 +1750,7 @@ const zh: Dict = {
     search: '搜索',
     account: '我的账户',
     wishlist: '收藏',
+    chatSupport: '聊天客服',
   },
   common: {
     addToCart: '加入购物车',
@@ -2583,6 +2586,7 @@ const en: Dict = {
     search: 'Search',
     account: 'My Page',
     wishlist: 'Wishlist',
+    chatSupport: 'Chat Support',
   },
   common: {
     addToCart: 'Add to Cart',

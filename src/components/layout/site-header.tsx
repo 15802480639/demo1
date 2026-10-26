@@ -27,6 +27,8 @@ export function SiteHeader() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  // 移动端菜单：当前展开的一级分类 href（null = 都收起）
+  const [openCat, setOpenCat] = useState<string | null>(null);
   const [navCategories, setNavCategories] = useState<NavCategory[]>([]);
   const count = cartCount(lines);
 
@@ -44,19 +46,29 @@ export function SiteHeader() {
     };
   }, []);
 
-  // 分类导航：一级分类进 nav，二级分类作为其下拉子项
+  // 分类导航：一级分类进 nav，二级/三级分类全部收进其下拉面板
   const topCategories = navCategories.filter((c) => c.depth === 1);
-  const subOf = (parentId: string) =>
-    navCategories.filter((c) => c.parentId === parentId && c.depth === 2);
+  // ⚠️ 只按 parentId 过滤、不写死 depth：数据层 depth 由树计算，
+  // 万一某级断档，写死 depth 会静默丢子分类
+  const subsOf = (parentId: string) =>
+    navCategories.filter((c) => c.parentId === parentId);
+  const labelOf = (c: NavCategory) =>
+    locale === 'zh' ? c.nameZh || c.name : c.name;
+  const catHref = (chain: NavCategory[]) =>
+    `/${locale}/c/${chain.map((c) => encodeURIComponent(c.slug)).join('/')}`;
 
   const nav = [
     { label: dict.nav.shop, href: `/${locale}/products` },
     ...topCategories.map((c) => ({
-      label: locale === 'zh' ? c.nameZh || c.name : c.name,
-      href: `/${locale}/c/${encodeURIComponent(c.slug)}`,
-      children: subOf(c.id).map((s) => ({
-        label: locale === 'zh' ? s.nameZh || s.name : s.name,
-        href: `/${locale}/c/${encodeURIComponent(c.slug)}/${encodeURIComponent(s.slug)}`,
+      label: labelOf(c),
+      href: catHref([c]),
+      children: subsOf(c.id).map((s) => ({
+        label: labelOf(s),
+        href: catHref([c, s]),
+        children: subsOf(s.id).map((t) => ({
+          label: labelOf(t),
+          href: catHref([c, s, t]),
+        })),
       })),
     })),
     { label: dict.nav.women, href: `/${locale}/products?gender=women` },
@@ -136,22 +148,37 @@ export function SiteHeader() {
                     }`}
                   />
                 </Link>
-                {/* 二级分类下拉：hover 展开 */}
+                {/* 二级/三级分类下拉：hover 展开，三级缩进列在二级下方 */}
                 {children && children.length > 0 && (
                   <div
                     className="absolute left-0 top-full hidden group-hover:block pt-3"
                     role="menu"
                   >
-                    <div className="bg-surface border border-line shadow-card py-2 min-w-[200px]">
+                    <div className="bg-surface border border-line shadow-card py-2 min-w-[220px] max-h-[70vh] overflow-y-auto">
                       {children.map((c) => (
-                        <Link
-                          key={c.href}
-                          href={c.href}
-                          role="menuitem"
-                          className="block px-4 py-2 text-sm text-ink-soft hover:text-accent hover:bg-surface-2 transition-colors whitespace-nowrap"
-                        >
-                          {c.label}
-                        </Link>
+                        <div key={c.href}>
+                          <Link
+                            href={c.href}
+                            role="menuitem"
+                            className="block px-4 py-2 text-sm text-ink hover:text-accent hover:bg-surface-2 transition-colors whitespace-nowrap"
+                          >
+                            {c.label}
+                          </Link>
+                          {'children' in c && c.children && c.children.length > 0 && (
+                            <div className="ml-4 my-1 border-l border-line">
+                              {c.children.map((t) => (
+                                <Link
+                                  key={t.href}
+                                  href={t.href}
+                                  role="menuitem"
+                                  className="block px-4 py-1.5 text-xs text-muted hover:text-accent transition-colors whitespace-nowrap"
+                                >
+                                  {t.label}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -271,28 +298,74 @@ export function SiteHeader() {
           <div className="px-4 py-3 flex flex-col">
             {nav.map((item) => {
               const children = 'children' in item ? item.children : undefined;
+              const hasChildren = !!children && children.length > 0;
+              const expanded = openCat === item.href;
               return (
-                <div key={item.label} className="border-b border-line last:border-0">
-                  <Link
-                    href={item.href}
-                    onClick={() => setMenuOpen(false)}
-                    className="block py-3 text-ink-soft"
-                  >
-                    {item.label}
-                  </Link>
-                  {children && children.length > 0 && (
-                    <div className="pb-2 pl-3 border-l border-line ml-1 flex flex-col">
-                      {children.map((c) => (
-                        <Link
-                          key={c.href}
-                          href={c.href}
-                          onClick={() => setMenuOpen(false)}
-                          className="py-2 text-sm text-muted hover:text-accent transition-colors"
+                <div key={item.href} className="border-b border-line last:border-0">
+                  {hasChildren ? (
+                    <>
+                      {/* 有子分类：点击展开/收起，不直接跳转 */}
+                      <button
+                        onClick={() => setOpenCat(expanded ? null : item.href)}
+                        className="w-full flex items-center justify-between py-3 text-ink-soft"
+                        aria-expanded={expanded}
+                      >
+                        {item.label}
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
                         >
-                          {c.label}
-                        </Link>
-                      ))}
-                    </div>
+                          <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.4" />
+                        </svg>
+                      </button>
+                      {expanded && (
+                        <div className="pb-2">
+                          <Link
+                            href={item.href}
+                            onClick={() => setMenuOpen(false)}
+                            className="block py-2 text-sm text-accent"
+                          >
+                            {dict.nav.shop} · {item.label}
+                          </Link>
+                          {children!.map((c) => (
+                            <div key={c.href} className="border-l border-line ml-1 pl-3">
+                              <Link
+                                href={c.href}
+                                onClick={() => setMenuOpen(false)}
+                                className="block py-2 text-sm text-ink-soft hover:text-accent transition-colors"
+                              >
+                                {c.label}
+                              </Link>
+                              {'children' in c && c.children && c.children.length > 0 && (
+                                <div className="ml-2 border-l border-line pl-3">
+                                  {c.children.map((t) => (
+                                    <Link
+                                      key={t.href}
+                                      href={t.href}
+                                      onClick={() => setMenuOpen(false)}
+                                      className="block py-1.5 text-xs text-muted hover:text-accent transition-colors"
+                                    >
+                                      {t.label}
+                                    </Link>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <Link
+                      href={item.href}
+                      onClick={() => setMenuOpen(false)}
+                      className="block py-3 text-ink-soft"
+                    >
+                      {item.label}
+                    </Link>
                   )}
                 </div>
               );
