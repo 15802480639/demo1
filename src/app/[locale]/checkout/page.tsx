@@ -229,6 +229,10 @@ export default function CheckoutPage() {
       }
       clear();
       setPlaced(data.order);
+      // 后台配置了 Kakao 链接：下单成功后自动跳转 KakaoTalk 完成支付
+      if (kakaoUrl) {
+        window.open(kakaoUrl, '_blank', 'noopener,noreferrer');
+      }
     } catch {
       setErr(dict.checkout.orderFailed);
     } finally {
@@ -277,13 +281,23 @@ export default function CheckoutPage() {
             </span>
           </div>
         </div>
-        <div className="mt-8 flex gap-3 justify-center">
+        <div className="mt-8 flex gap-3 justify-center flex-wrap">
+          {kakaoUrl && (
+            <a
+              href={kakaoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-gold"
+            >
+              {dict.common.payViaKakao}
+            </a>
+          )}
           {user && (
             <Link href={`/${locale}/account/orders`} className="btn-outline">
               {dict.checkout.myOrders}
             </Link>
           )}
-          <Link href={`/${locale}`} className="btn-gold">
+          <Link href={`/${locale}`} className={kakaoUrl ? 'btn-outline' : 'btn-gold'}>
             {dict.checkout.continueShopping}
           </Link>
         </div>
@@ -581,22 +595,11 @@ export default function CheckoutPage() {
                     : `약 ${Math.floor((grand * quote.rule.earnPercent) / 100).toLocaleString()}P 적립 예정`}
               </p>
             )}
-            {/* 付款入口：后台已配置 Kakao 咨询链接 → 跳转到 KakaoTalk 完成支付/咨询；
-                未配置时回落到原下单流程 */}
-            {kakaoUrl ? (
-              <a
-                href={kakaoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-gold w-full mt-6 flex items-center justify-center gap-2"
-              >
-                {dict.common.payViaKakao}
-              </a>
-            ) : (
-              <button type="submit" disabled={loading} className="btn-gold w-full mt-6">
-                {loading ? '…' : dict.common.buyNow}
-              </button>
-            )}
+            {/* 付款按钮：始终先在本店生成订单；后台配置了 Kakao 链接时
+                下单成功后自动跳转 KakaoTalk 完成支付 */}
+            <button type="submit" disabled={loading} className="btn-gold w-full mt-6">
+              {loading ? '…' : kakaoUrl ? dict.common.payViaKakao : dict.common.buyNow}
+            </button>
           </div>
         </form>
       )}
