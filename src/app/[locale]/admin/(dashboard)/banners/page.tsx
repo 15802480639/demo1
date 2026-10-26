@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { bannerStatusLabel } from '@/lib/order-labels';
-import { getDictionary } from '@/i18n/dictionaries';
 
 type Banner = {
   id: string;
@@ -33,8 +32,8 @@ const empty = (): Omit<Banner, 'id'> => ({
 });
 
 export default function BannersAdmin() {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { locale, dict } = useLocale();
+  const t = dict.admin;
   const [list, setList] = useState<Banner[]>([]);
   const [editing, setEditing] = useState<Banner | null>(null);
   const [form, setForm] = useState<Omit<Banner, 'id'>>(empty());
@@ -149,18 +148,18 @@ export default function BannersAdmin() {
               className="w-full h-32 object-cover bg-black/5"
             />
             <div className="text-sm text-ink truncate">
-              {b.titleZh || b.title || '（无标题）'}
+              {b.titleZh || b.title || t.bnNoTitle}
             </div>
             <div className="flex items-center justify-between text-[11px] text-muted">
               <span>#{b.order}</span>
-              <span>{bannerStatusLabel(b.status)}</span>
+              <span>{bannerStatusLabel(b.status, locale)}</span>
             </div>
             <div className="flex gap-3 text-xs">
               <button onClick={() => openEdit(b)} className="text-accent hover:underline">
-                编辑
+                {t.edit}
               </button>
               <button onClick={() => remove(b.id)} className="text-red-500 hover:underline">
-                删除
+                {t.delete}
               </button>
             </div>
           </div>
@@ -203,34 +202,32 @@ export default function BannersAdmin() {
             placeholder="/uploads/xxx.svg or https://..."
           />
           <span className="text-[10px] text-muted">upload → /uploads</span>
-          <p className="text-[10px] text-muted mt-1">
-            建议尺寸 1920×1080（16:9 横图，首页全屏轮播用）；单张 ≤10MB
-          </p>
+          <p className="text-[10px] text-muted mt-1">{t.bnSizeHint}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={label}>{t.title}（韩语/默认）</label>
+            <label className={label}>{t.title}{t.bnSuffixKo}</label>
             <input className={input} value={form.title ?? ''} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
           </div>
           <div>
-            <label className={label}>{t.title} (中文)</label>
+            <label className={label}>{t.title}{t.bnSuffixZh}</label>
             <input className={input} value={form.titleZh ?? ''} onChange={(e) => setForm((p) => ({ ...p, titleZh: e.target.value }))} />
           </div>
           <div>
-            <label className={label}>{t.subtitle}（韩语/默认）</label>
+            <label className={label}>{t.subtitle}{t.bnSuffixKo}</label>
             <input className={input} value={form.subtitle ?? ''} onChange={(e) => setForm((p) => ({ ...p, subtitle: e.target.value }))} />
           </div>
           <div>
-            <label className={label}>{t.subtitle} (中文)</label>
+            <label className={label}>{t.subtitle}{t.bnSuffixZh}</label>
             <input className={input} value={form.subtitleZh ?? ''} onChange={(e) => setForm((p) => ({ ...p, subtitleZh: e.target.value }))} />
           </div>
           <div>
-            <label className={label}>{t.ctaText}（韩语/默认）</label>
+            <label className={label}>{t.ctaText}{t.bnSuffixKo}</label>
             <input className={input} value={form.cta ?? ''} onChange={(e) => setForm((p) => ({ ...p, cta: e.target.value }))} />
           </div>
           <div>
-            <label className={label}>{t.ctaText} (中文)</label>
+            <label className={label}>{t.ctaText}{t.bnSuffixZh}</label>
             <input className={input} value={form.ctaZh ?? ''} onChange={(e) => setForm((p) => ({ ...p, ctaZh: e.target.value }))} />
           </div>
           <div>

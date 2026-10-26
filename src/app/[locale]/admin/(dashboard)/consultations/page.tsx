@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLocale } from '@/components/i18n/locale-provider';
 import { formatPrice } from '@/lib/format';
 
 /**
@@ -23,13 +24,16 @@ type Row = {
   createdAt: string;
 };
 
-const STATUS: Record<string, { label: string; cls: string }> = {
-  new: { label: '新咨询', cls: 'bg-red-50 text-red-700 border-red-200' },
-  contacted: { label: '已联系', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-  closed: { label: '已关闭', cls: 'bg-line/20 text-muted border-line' },
+/** 状态样式与语言无关，label 在渲染时按当前语言查字典 */
+const STATUS_CLS: Record<string, string> = {
+  new: 'bg-red-50 text-red-700 border-red-200',
+  contacted: 'bg-amber-50 text-amber-700 border-amber-200',
+  closed: 'bg-line/20 text-muted border-line',
 };
 
 export default function AdminConsultationsPage() {
+  const { locale, dict } = useLocale();
+  const t = dict.admin;
   const [rows, setRows] = useState<Row[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [filter, setFilter] = useState('all');
@@ -107,23 +111,22 @@ export default function AdminConsultationsPage() {
   }
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const statusLabel = (s: string) =>
+    s === 'contacted' ? t.csContacted : s === 'closed' ? t.csClosed : t.csNew;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl mb-1">Kakao 咨询记录</h1>
-        <p className="text-xs text-muted">
-          用户点「Kakao 咨询购买」时本站会自动留档。客服在 Kakao 收到消息后，
-          到这里查商品上下文，点「复制回复模板」粘到 Kakao 即可。
-        </p>
+        <h1 className="text-xl mb-1">{t.csTitle}</h1>
+        <p className="text-xs text-muted">{t.csIntro}</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
         {[
-          { k: 'all', label: `全部 ${total}` },
-          { k: 'new', label: `新咨询 ${counts.new ?? 0}` },
-          { k: 'contacted', label: `已联系 ${counts.contacted ?? 0}` },
-          { k: 'closed', label: `已关闭 ${counts.closed ?? 0}` },
+          { k: 'all', label: t.csAll.replace('{n}', String(total)) },
+          { k: 'new', label: t.csNewCount.replace('{n}', String(counts.new ?? 0)) },
+          { k: 'contacted', label: t.csContactedCount.replace('{n}', String(counts.contacted ?? 0)) },
+          { k: 'closed', label: t.csClosedCount.replace('{n}', String(counts.closed ?? 0)) },
         ].map((b) => (
           <button
             key={b.k}
@@ -138,43 +141,43 @@ export default function AdminConsultationsPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted">加载中…</p>
+        <p className="text-sm text-muted">{t.csLoading}</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-muted">暂无记录。</p>
+        <p className="text-sm text-muted">{t.csEmpty}</p>
       ) : (
         <div className="border border-line divide-y divide-line">
           {rows.map((r) => {
-            const st = STATUS[r.status] ?? STATUS.new;
+            const st = STATUS_CLS[r.status] ?? STATUS_CLS.new;
             return (
               <div key={r.id} className="p-4 flex flex-col lg:flex-row lg:items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-[11px] px-2 py-0.5 border ${st.cls}`}>{st.label}</span>
+                    <span className={`text-[11px] px-2 py-0.5 border ${st}`}>{statusLabel(r.status)}</span>
                     <span className="text-[11px] text-muted">
-                      {new Date(r.createdAt).toLocaleString('zh-CN')}
+                      {new Date(r.createdAt).toLocaleString(locale === 'ko' ? 'ko-KR' : locale === 'zh' ? 'zh-CN' : 'en-US')}
                     </span>
                     <span className="text-[11px] text-muted">
-                      访客语言: {r.locale}
-                      {r.sourcePage ? ` · 来源: ${r.sourcePage}` : ''}
+                      {t.csVisitorLang.replace('{l}', r.locale)}
+                      {r.sourcePage ? t.csSource.replace('{s}', r.sourcePage) : ''}
                     </span>
                   </div>
                   <p className="text-sm mt-1.5 truncate">{r.productName}</p>
                   <p className="text-xs text-muted mt-0.5">
                     {r.skuLabel ? `${r.skuLabel} · ` : ''}
-                    {formatPrice(r.price, 'zh')}
+                    {formatPrice(r.price, locale)}
                   </p>
                 </div>
 
                 <div className="flex gap-2 shrink-0 flex-wrap">
                   <button onClick={() => copyTemplate(r)} className="btn-gold text-xs px-3 py-2">
-                    {copied === r.id ? '✓ 已复制' : '复制回复模板'}
+                    {copied === r.id ? t.csCopyOk : t.csCopy}
                   </button>
                   {r.status !== 'contacted' && (
                     <button
                       onClick={() => setStatus(r.id, 'contacted')}
                       className="btn-outline text-xs px-3 py-2"
                     >
-                      标为已联系
+                      {t.csMarkContacted}
                     </button>
                   )}
                   {r.status !== 'closed' && (
@@ -182,7 +185,7 @@ export default function AdminConsultationsPage() {
                       onClick={() => setStatus(r.id, 'closed')}
                       className="btn-outline text-xs px-3 py-2"
                     >
-                      关闭
+                      {t.csClose}
                     </button>
                   )}
                 </div>
@@ -193,8 +196,7 @@ export default function AdminConsultationsPage() {
       )}
 
       <p className="text-[11px] text-muted">
-        提示：Kakao 咨询链接在「SEO 设置」里以 <code>kakao.consultUrl</code> 配置，
-        未配置时前台不显示 Kakao 入口（不会回退到任何默认链接）。
+        <span dangerouslySetInnerHTML={{ __html: t.csTip }} />
       </p>
     </div>
   );

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 import { formatPrice } from '@/lib/format';
 import { statusLabel } from '@/lib/order-labels';
 
@@ -61,8 +60,8 @@ type OrderRow = {
 };
 
 export default function AdminOrdersPage() {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { locale, dict } = useLocale();
+  const t = dict.admin;
   const sp = useSearchParams();
   const userId = sp.get('userId') ?? '';
 
@@ -149,19 +148,19 @@ export default function AdminOrdersPage() {
     <div>
       <div className="mb-4">
         <h1 className="font-display text-3xl text-ink">{t.orders}</h1>
-        <p className="text-xs text-muted mt-1">
-          状态下拉可直接改订单状态；「已联系」是客服跟进标记，方便筛出还没处理的单。
-        </p>
+        <p className="text-xs text-muted mt-1">{t.oIntro}</p>
       </div>
 
       {/* 按客户筛选时的提示条 */}
       {userId && (
         <div className="mb-4 flex items-center gap-3 border border-accent/40 bg-accent/5 px-4 py-2 text-sm">
           <span>
-            正在查看客户 <b>{userName || userId}</b> 的订单（{orders.length} 单）
+            {t.oFilteringUser
+              .replace('{name}', String(userName || userId))
+              .replace('{n}', String(orders.length))}
           </span>
-          <Link href={`/${'zh'}/admin/orders`} className="text-accent hover:underline text-xs">
-            ✕ 清除筛选，查看全部
+          <Link href={`/${locale}/admin/orders`} className="text-accent hover:underline text-xs">
+            {t.oClearFilter}
           </Link>
         </div>
       )}
@@ -171,14 +170,14 @@ export default function AdminOrdersPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="搜索：订单号 / 客户邮箱 / 运单号"
+          placeholder={t.oSearchPh}
           className="border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent w-64"
         />
         <select className={select} value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
-          <option value="">全部状态</option>
+          <option value="">{t.oAllStatus}</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {statusLabel(s, 'zh')}
+              {statusLabel(s, locale)}
             </option>
           ))}
         </select>
@@ -187,17 +186,17 @@ export default function AdminOrdersPage() {
           value={fContacted}
           onChange={(e) => setFContacted(e.target.value)}
         >
-          <option value="">已联系 / 未联系</option>
-          <option value="yes">只看已联系</option>
-          <option value="no">只看未联系</option>
+          <option value="">{t.oContactedAny}</option>
+          <option value="yes">{t.oContactedYes}</option>
+          <option value="no">{t.oContactedNo}</option>
         </select>
         <span className="text-xs text-muted self-center">
-          {filtered.length} / {orders.length} 单
+          {filtered.length} / {orders.length} {t.oUnit}
         </span>
       </div>
 
       {loading ? (
-        <p className="text-muted">加载中…</p>
+        <p className="text-muted">{t.oLoading}</p>
       ) : (
         <div className="border border-line divide-y divide-line">
           {filtered.map((o) => (
@@ -213,7 +212,7 @@ export default function AdminOrdersPage() {
                 <button
                   onClick={() => setExpanded(expanded === o.id ? null : o.id)}
                   className="flex-1 min-w-0 text-sm text-ink-soft truncate text-left hover:text-accent"
-                  title="点击查看订单详情"
+                  title={t.oViewDetail}
                 >
                   {expanded === o.id ? '▾ ' : '▸ '}
                   {o.items.map((it) => `${it.name} ×${it.quantity}`).join(', ')}
@@ -225,11 +224,14 @@ export default function AdminOrdersPage() {
                 {(o.pointsUsed > 0 || o.pointsEarned > 0) && (
                   <span
                     className="text-[10px] px-2 py-1 border border-accent/40 text-accent whitespace-nowrap"
-                    title={`用 ${o.pointsUsed} 分抵扣 ${o.pointsDiscount}₩ · 赠送 ${o.pointsEarned} 分`}
+                    title={t.oPointsTip
+                      .replace('{a}', String(o.pointsUsed))
+                      .replace('{b}', String(o.pointsDiscount))
+                      .replace('{c}', String(o.pointsEarned))}
                   >
-                    {o.pointsUsed > 0 ? `积分 -${o.pointsUsed.toLocaleString()}` : ''}
+                    {o.pointsUsed > 0 ? t.oPointsUsedBadge.replace('{n}', o.pointsUsed.toLocaleString()) : ''}
                     {o.pointsUsed > 0 && o.pointsEarned > 0 ? ' / ' : ''}
-                    {o.pointsEarned > 0 ? `返 +${o.pointsEarned.toLocaleString()}` : ''}
+                    {o.pointsEarned > 0 ? t.oPointsEarnedBadge.replace('{n}', o.pointsEarned.toLocaleString()) : ''}
                   </span>
                 )}
                 {/* 已联系标记 */}
@@ -240,9 +242,9 @@ export default function AdminOrdersPage() {
                       ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
                       : 'border-line text-muted hover:border-accent'
                   }`}
-                  title={o.contacted ? '点击标记为未联系' : '点击标记为已联系'}
+                  title={o.contacted ? t.oMarkContacted : t.oMarkUncontacted}
                 >
-                  {o.contacted ? '✓ 已联系' : '未联系'}
+                  {o.contacted ? t.oContactedBadge : t.oUncontactedBadge}
                 </button>
                 <select
                   value={o.status}
@@ -251,7 +253,7 @@ export default function AdminOrdersPage() {
                 >
                   {STATUSES.map((s) => (
                     <option key={s} value={s}>
-                      {statusLabel(s, 'zh')}
+                      {statusLabel(s, locale)}
                     </option>
                   ))}
                 </select>
@@ -259,7 +261,7 @@ export default function AdminOrdersPage() {
               <div className="flex items-center gap-2 pl-48 flex-wrap">
                 <input
                   className={input}
-                  placeholder="运单号"
+                  placeholder={t.oTrackingPh}
                   value={o.trackingNo ?? ''}
                   onChange={(e) =>
                     setOrders((os) =>
@@ -271,7 +273,7 @@ export default function AdminOrdersPage() {
                 />
                 <input
                   className={input}
-                  placeholder="快递公司"
+                  placeholder={t.oCarrierPh}
                   value={o.carrier ?? ''}
                   onChange={(e) =>
                     setOrders((os) =>
@@ -286,7 +288,7 @@ export default function AdminOrdersPage() {
                   disabled={saving === o.id}
                   className="text-xs px-3 py-1.5 border border-line hover:border-accent text-accent"
                 >
-                  {saving === o.id ? '保存中…' : '保存物流'}
+                  {saving === o.id ? t.oSaving : t.oSaveLogistics}
                 </button>
               </div>
 
@@ -294,15 +296,15 @@ export default function AdminOrdersPage() {
               {expanded === o.id && (
                 <div className="ml-48 border border-line bg-surface p-4 text-sm space-y-3">
                   <div>
-                    <p className="text-xs tracking-widest text-muted mb-1">商品明细</p>
+                    <p className="text-xs tracking-widest text-muted mb-1">{t.oItemsTitle}</p>
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="text-muted text-left">
-                          <th className="py-1 font-normal">商品</th>
-                          <th className="py-1 font-normal">规格（尺码/颜色）</th>
-                          <th className="py-1 font-normal">单价</th>
-                          <th className="py-1 font-normal">数量</th>
-                          <th className="py-1 font-normal">小计</th>
+                          <th className="py-1 font-normal">{t.oColProduct}</th>
+                          <th className="py-1 font-normal">{t.oColSpec}</th>
+                          <th className="py-1 font-normal">{t.oColPrice}</th>
+                          <th className="py-1 font-normal">{t.oColQty}</th>
+                          <th className="py-1 font-normal">{t.oColSubtotal}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -324,74 +326,76 @@ export default function AdminOrdersPage() {
                   </div>
                   <div className="text-xs text-muted space-y-0.5">
                     <p>
-                      优惠券：
+                      {t.oCouponLabel}
                       {o.couponCode ? (
                         <>
-                          已使用 <span className="text-ink font-medium">{o.couponCode}</span>
+                          {t.oCouponUsed}{' '}
+                          <span className="text-ink font-medium">{o.couponCode}</span>
                           {o.discount > 0 && `（-${formatPrice(o.discount, 'ko')}）`}
                         </>
                       ) : o.discount > 0 ? (
-                        <>优惠 -{formatPrice(o.discount, 'ko')}（无券码）</>
+                        <>{t.oCouponNoneCode.replace('{n}', formatPrice(o.discount, 'ko'))}</>
                       ) : (
-                        '未使用'
+                        t.oCouponUnused
                       )}
                     </p>
                     <p>
-                      积分抵扣：
+                      {t.oPointsLabel}
                       {o.pointsUsed > 0 ? (
                         <>
-                          使用{' '}
+                          {t.pointsUsed}{' '}
                           <span className="text-accent font-medium">
-                            {o.pointsUsed.toLocaleString()} 分
-                          </span>
-                          ，抵现金{' '}
+                            {o.pointsUsed.toLocaleString()}
+                          </span>{' '}
+                          {t.oPointsWorth}{' '}
                           <span className="text-accent">
                             -{formatPrice(o.pointsDiscount, 'ko')}
                           </span>
                         </>
                       ) : (
-                        '未使用'
+                        t.oCouponUnused
                       )}
                     </p>
                     <p>
-                      本单赠送积分：
+                      {t.oEarnedLabel}
                       {o.pointsEarned > 0 ? (
                         <span className="text-emerald-600 font-medium">
-                          {o.pointsEarned.toLocaleString()} 分
+                          {o.pointsEarned.toLocaleString()} {t.cPointsUnit}
                         </span>
                       ) : (
-                        '无'
+                        t.oPointsNone
                       )}
                     </p>
                     {(o.grantedCoupons?.length ?? 0) > 0 && (
                       <p>
-                        本单赠送优惠券：
+                        {t.oGrantCouponLabel}
                         {o.grantedCoupons!.map((g, i) => (
                           <span key={`${g.code}-${i}`}>
                             {i > 0 && '、'}
                             <span className="text-ink font-medium">{g.code}</span>
                             {g.status === 'revoked' && (
-                              <span className="text-muted">（已收回）</span>
+                              <span className="text-muted">{t.oCouponRevoked}</span>
                             )}
                             {g.status === 'used' && (
-                              <span className="text-muted">（已使用）</span>
+                              <span className="text-muted">{t.oCouponUsedTag}</span>
                             )}
                           </span>
                         ))}
                       </p>
                     )}
                     <p>
-                      小计 {formatPrice(o.subtotal, 'ko')}
-                      {o.discount > 0 && ` · 优惠 -${formatPrice(o.discount, 'ko')}`}
+                      {t.oSubtotalText.replace('{n}', formatPrice(o.subtotal, 'ko'))}
+                      {o.discount > 0 && t.oDiscountText.replace('{n}', formatPrice(o.discount, 'ko'))}
                       {o.pointsDiscount > 0 &&
-                        ` · 积分抵扣 -${formatPrice(o.pointsDiscount, 'ko')}`}{' '}
-                      · 运费{' '}
-                      {o.shippingFee > 0 ? formatPrice(o.shippingFee, 'ko') : '免运费'} · 实付{' '}
-                      <b className="text-ink">{formatPrice(o.total, 'ko')}</b>
+                        t.oPointsDeductText.replace('{n}', formatPrice(o.pointsDiscount, 'ko'))}{' '}
+                      {o.shippingFee > 0
+                        ? t.oShippingText.replace('{n}', formatPrice(o.shippingFee, 'ko'))
+                        : ` · ${t.oFreeShipping}`}{' '}
+                      {t.oPaidText.replace('{n}', formatPrice(o.total, 'ko'))}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs tracking-widest text-muted mb-1">收货地址</p>
+                    <p className="text-xs tracking-widest text-muted mb-1">{t.oAddressTitle}</p>
                     {o.address ? (
                       <p className="text-xs">
                         {o.address.name} · {o.address.phone}
@@ -400,7 +404,7 @@ export default function AdminOrdersPage() {
                         {o.address.city} {o.address.line1} {o.address.line2 ?? ''}
                       </p>
                     ) : (
-                      <p className="text-xs text-muted">（该订单没有保存地址快照）</p>
+                      <p className="text-xs text-muted">{t.oNoAddress}</p>
                     )}
                   </div>
                 </div>
@@ -409,7 +413,7 @@ export default function AdminOrdersPage() {
           ))}
           {filtered.length === 0 && (
             <p className="p-5 text-sm text-muted">
-              {orders.length === 0 ? '暂无订单。' : '没有符合筛选条件的订单。'}
+              {orders.length === 0 ? t.oEmpty : t.oNoMatch}
             </p>
           )}
         </div>

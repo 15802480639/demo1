@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 import { formatPrice } from '@/lib/format';
 
 type Customer = {
@@ -18,8 +17,8 @@ type Customer = {
 };
 
 export default function AdminCustomersPage() {
-  const { locale } = useLocale();
-  const t = getDictionary('zh').admin;
+  const { locale, dict } = useLocale();
+  const t = dict.admin;
   const [list, setList] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
@@ -54,7 +53,7 @@ export default function AdminCustomersPage() {
   async function submitCoupon() {
     if (!couponTarget) return;
     if (!couponId) {
-      setCouponMsg('请选择要发放的优惠券');
+      setCouponMsg(t.cPickCoupon);
       return;
     }
     const res = await fetch(`/api/admin/customers/${couponTarget.id}/coupons`, {
@@ -65,9 +64,9 @@ export default function AdminCustomersPage() {
     const d = await res.json();
     if (res.ok) {
       const c = couponList.find((x) => x.id === couponId);
-      setCouponMsg(`✓ 已发放 ${c?.code ?? ''}，用户可在「我的优惠券」查看`);
+      setCouponMsg(t.cGranted.replace('{code}', c?.code ?? ''));
     } else {
-      setCouponMsg('发放失败，请重试');
+      setCouponMsg(t.cGrantFailed);
     }
   }
 
@@ -104,7 +103,7 @@ export default function AdminCustomersPage() {
     if (!editing) return;
     const n = Math.trunc(Number(amount));
     if (!Number.isFinite(n) || n === 0) {
-      setPmMsg('请输入非 0 的整数（正数增加、负数扣减）');
+      setPmMsg(t.cPmBadAmount);
       return;
     }
     setSaving(true);
@@ -116,14 +115,14 @@ export default function AdminCustomersPage() {
     });
     const d = await res.json();
     if (res.ok) {
-      setPmMsg(`✓ 成功，当前积分 ${d.balance.toLocaleString()}`);
+      setPmMsg(t.cPmOk.replace('{n}', d.balance.toLocaleString()));
       setAmount('');
       setRemark('');
       // 就地更新列表
       setList((ls) => ls.map((x) => (x.id === editing.id ? { ...x, points: d.balance } : x)));
       setTimeout(() => setEditing(null), 900);
     } else {
-      setPmMsg(d.error === 'bad_amount' ? '请输入有效的整数' : '操作失败，请重试');
+      setPmMsg(d.error === 'bad_amount' ? t.cPmInvalid : t.cPmFailed);
     }
     setSaving(false);
   }
@@ -131,27 +130,24 @@ export default function AdminCustomersPage() {
   return (
     <div>
       <div className="mb-4">
-        <h1 className="font-display text-3xl text-ink">客户管理</h1>
-        <p className="text-xs text-muted mt-1">
-          搜索客户邮箱或昵称，点「订单管理」查看该客户名下的订单列表和订单详情。点积分旁的「✎
-          调整」可手动增减积分，点「发放优惠券」可直接送券到客户账户。
-        </p>
+        <h1 className="font-display text-3xl text-ink">{t.customers}</h1>
+        <p className="text-xs text-muted mt-1">{t.cIntro}</p>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="搜索：邮箱 / 昵称"
+          placeholder={t.cSearchPh}
           className="border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent w-64"
         />
         <span className="text-xs text-muted self-center">
-          {filtered.length} / {list.length} 位客户
+          {filtered.length} / {list.length} {t.cUnit}
         </span>
       </div>
 
       {loading ? (
-        <p className="text-muted">加载中…</p>
+        <p className="text-muted">{t.cLoading}</p>
       ) : (
         <div className="border border-line divide-y divide-line">
           {filtered.map((c) => (
@@ -163,30 +159,30 @@ export default function AdminCustomersPage() {
                 <p className="text-xs text-muted">
                   {c.username ? `@${c.username}` : ''}
                   {c.username && c.email ? ' · ' : ''}
-                  {c.email || '未留邮箱'} · 注册于{' '}
-                  {new Date(c.createdAt).toLocaleDateString('zh-CN')}
+                  {c.email || t.cNoEmail} ·{' '}
+                  {t.cJoinedAt.replace('{d}', new Date(c.createdAt).toLocaleDateString('zh-CN'))}
                 </p>
               </div>
               <span className="text-sm w-20 text-center text-muted">
-                {c.orderCount} 单
+                {c.orderCount} {t.cOrderUnit}
               </span>
               <div className="flex items-center justify-end gap-2 w-40">
                 <button
                   onClick={() => openPointEditor(c)}
                   className="text-sm hover:opacity-70 flex items-baseline gap-1"
-                  title="点击手动增减积分"
+                  title={t.cPointsTip}
                 >
                   <span className="text-accent font-display text-base">
                     {c.points.toLocaleString()}
                   </span>
-                  <span className="text-[10px] text-muted">分</span>
+                  <span className="text-[10px] text-muted">{t.cPointsUnit}</span>
                 </button>
                 <button
                   onClick={() => openPointEditor(c)}
                   className="text-xs px-2 py-1 border border-line hover:border-accent text-accent whitespace-nowrap"
-                  title="手动增加或扣减积分"
+                  title={t.cAdjustTip}
                 >
-                  ✎ 调整
+                  {t.cAdjustBtn}
                 </button>
               </div>
               <span className="font-display text-lg w-32 text-right">
@@ -195,7 +191,7 @@ export default function AdminCustomersPage() {
               <button
                 onClick={() => openCouponEditor(c)}
                 className="text-xs px-3 py-1.5 border border-line hover:border-accent text-accent whitespace-nowrap"
-                title="给该客户发放优惠券"
+                title={t.cGrantTip}
               >
                 {t.grantCoupon}
               </button>
@@ -203,13 +199,13 @@ export default function AdminCustomersPage() {
                 href={`/${locale}/admin/orders?userId=${c.id}`}
                 className="text-xs px-3 py-1.5 border border-line hover:border-accent text-accent whitespace-nowrap"
               >
-                订单管理 →
+                {t.cOrdersLink}
               </Link>
             </div>
           ))}
           {filtered.length === 0 && (
             <p className="p-5 text-sm text-muted">
-              {list.length === 0 ? '暂无客户。' : '没有符合搜索条件的客户。'}
+              {list.length === 0 ? t.cEmpty : t.cNoMatch}
             </p>
           )}
         </div>
@@ -230,28 +226,30 @@ export default function AdminCustomersPage() {
               </button>
             </div>
             <p className="text-sm text-muted">
-              客户：<span className="text-ink">{editing.name || editing.email || editing.id}</span>
+              {t.cPmCustomerLabel}
+              <span className="text-ink">{editing.name || editing.email || editing.id}</span>
               <br />
-              当前积分：<span className="text-accent">{editing.points.toLocaleString()}</span>
+              {t.cPmCurrent}
+              <span className="text-accent">{editing.points.toLocaleString()}</span>
             </p>
             <div>
               <label className="text-xs tracking-widest text-muted block mb-1">
-                变动数量（正数增加，负数扣减）
+                {t.cPmAmountLabel}
               </label>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="如 1000 或 -500"
+                placeholder={t.cPmAmountPh}
                 className="w-full border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
               />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">备注原因</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.cPmReasonLabel}</label>
               <input
                 value={remark}
                 onChange={(e) => setRemark(e.target.value)}
-                placeholder="如：售后补偿 / 活动赠送"
+                placeholder={t.cPmReasonPh}
                 className="w-full border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
               />
             </div>
@@ -262,14 +260,14 @@ export default function AdminCustomersPage() {
             )}
             <div className="flex gap-3 pt-1">
               <button onClick={submitPoints} disabled={saving} className="btn-gold">
-                {saving ? '处理中…' : '确认'}
+                {saving ? t.cProcessing : t.cConfirm}
               </button>
               <button
                 type="button"
                 onClick={() => setEditing(null)}
                 className="btn-outline"
               >
-                取消
+                {t.cancel}
               </button>
             </div>
           </div>
@@ -291,29 +289,28 @@ export default function AdminCustomersPage() {
               </button>
             </div>
             <p className="text-sm text-muted">
-              客户：<span className="text-ink">{couponTarget.name || couponTarget.email || couponTarget.id}</span>
+              {t.cPmCustomerLabel}
+              <span className="text-ink">{couponTarget.name || couponTarget.email || couponTarget.id}</span>
               <br />
-              <span className="text-xs">发放后用户可在「我的账户 → 我的优惠券」看到，结算时输入券码即可使用。</span>
+              <span className="text-xs">{t.cGrantHint}</span>
             </p>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">选择优惠券</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.cGrantPickLabel}</label>
               <select
                 value={couponId}
                 onChange={(e) => setCouponId(e.target.value)}
                 className="w-full border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
               >
-                <option value="">— 请选择 —</option>
+                <option value="">{t.cPickPh}</option>
                 {couponList.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.code}（{c.type === 'percent' ? `${c.value}%` : `₩${c.value}`}
-                    {c.active ? '' : ' · 已停用'}）
+                    {c.active ? '' : t.cDisabled}）
                   </option>
                 ))}
               </select>
               {couponList.length === 0 && (
-                <p className="text-[11px] text-muted mt-1">
-                  还没有优惠券，请先到「优惠券管理」创建。
-                </p>
+                <p className="text-[11px] text-muted mt-1">{t.cNoCouponsYet}</p>
               )}
             </div>
             {couponMsg && (
@@ -323,14 +320,14 @@ export default function AdminCustomersPage() {
             )}
             <div className="flex gap-3 pt-1">
               <button onClick={submitCoupon} className="btn-gold">
-                确认发放
+                {t.cGrantSubmit}
               </button>
               <button
                 type="button"
                 onClick={() => setCouponTarget(null)}
                 className="btn-outline"
               >
-                取消
+                {t.cancel}
               </button>
             </div>
           </div>

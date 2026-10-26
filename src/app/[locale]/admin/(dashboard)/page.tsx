@@ -11,7 +11,7 @@ export default async function AdminDashboard({
 }) {
   const { locale } = await params;
   const loc = (isLocale(locale) ? locale : 'ko') as Locale;
-  const dict = getDictionary('zh'); // 后台固定中文
+  const dict = getDictionary(loc);
 
   const [productCount, orderCount, customerCount, revenue, recentOrders] =
     await Promise.all([

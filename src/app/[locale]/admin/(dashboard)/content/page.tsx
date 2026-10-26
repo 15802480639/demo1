@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 
 type EventItem = {
   id: string;
@@ -34,13 +33,13 @@ function toBi(v: unknown): BiText {
 
 const emptyBi = (): BiText => ({ ko: '', zh: '' });
 
-/** 固定页面正文：slug 对应前台 /info/<slug>，正文存 SiteSetting 键 info.<slug>.<locale> */
-const INFO_PAGE_DEFS: { slug: string; label: string }[] = [
-  { slug: 'shipping', label: '配送政策（/info/shipping）' },
-  { slug: 'returns', label: '退换货政策（/info/returns）' },
-  { slug: 'contact', label: '联系我们（/info/contact）' },
-  { slug: 'privacy', label: '隐私政策（/info/privacy）' },
-  { slug: 'terms', label: '服务条款（/info/terms）' },
+/** 固定页面正文：slug 对应前台 /info/<slug>，正文存 SiteSetting 键 info.<slug>.<locale>；label 走字典键 */
+const INFO_PAGE_DEFS: { slug: string; key: 'ctShipping' | 'ctReturns' | 'ctContact' | 'ctPrivacy' | 'ctTerms' }[] = [
+  { slug: 'shipping', key: 'ctShipping' },
+  { slug: 'returns', key: 'ctReturns' },
+  { slug: 'contact', key: 'ctContact' },
+  { slug: 'privacy', key: 'ctPrivacy' },
+  { slug: 'terms', key: 'ctTerms' },
 ];
 type InfoPagesState = Record<string, { ko: string; zh: string; en: string }>;
 const emptyInfoPages = (): InfoPagesState =>
@@ -74,8 +73,8 @@ const DEFAULT_FOOTER_COLUMNS: FooterColumnEdit[] = [
 ];
 
 export default function AdminContentPage() {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const [footer, setFooter] = useState({
     brandName: emptyBi(),
     brandDesc: emptyBi(),
@@ -249,86 +248,78 @@ export default function AdminContentPage() {
   return (
     <div className="space-y-10">
       <div>
-        <h1 className="font-display text-3xl text-ink">页面内容</h1>
-        <p className="text-xs text-muted mt-1">
-          这里管理前台页面上直接展示的文案和活动内容，改完刷新前台即可看到。
-        </p>
+        <h1 className="font-display text-3xl text-ink">{t.ctPageTitle}</h1>
+        <p className="text-xs text-muted mt-1">{t.ctIntro}</p>
       </div>
 
       {/* 首页介绍文案 */}
       <section className="border border-line bg-surface p-5 space-y-4 max-w-2xl">
         <div>
-          <h2 className="font-display text-xl text-ink">首页介绍文案</h2>
-          <p className="text-xs text-muted mt-1">
-            首页中部「高端高尔夫服饰商城」那一段文字。三种语言可分别填写；某语言留空则显示该语言默认文案。
-          </p>
+          <h2 className="font-display text-xl text-ink">{t.ctHomeSection}</h2>
+          <p className="text-xs text-muted mt-1">{t.ctHomeHint}</p>
         </div>
         <div>
-          <label className="text-xs tracking-widest text-muted block mb-1">标题</label>
+          <label className="text-xs tracking-widest text-muted block mb-1">{t.ctLabelTitle}</label>
           <div className="space-y-2">
             <input
               className="w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
               value={homeSeo.heading.ko}
               onChange={(e) => setHomeSeo((s) => ({ ...s, heading: { ...s.heading, ko: e.target.value } }))}
-              placeholder="韩语标题（留空用默认）"
+              placeholder={t.ctPhTitleKo}
             />
             <input
               className="w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
               value={homeSeo.heading.zh}
               onChange={(e) => setHomeSeo((s) => ({ ...s, heading: { ...s.heading, zh: e.target.value } }))}
-              placeholder="中文标题（留空用默认）"
+              placeholder={t.ctPhTitleZh}
             />
             <input
               className="w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
               value={homeSeo.heading.en}
               onChange={(e) => setHomeSeo((s) => ({ ...s, heading: { ...s.heading, en: e.target.value } }))}
-              placeholder="英语标题（留空用默认）"
+              placeholder={t.ctPhTitleEn}
             />
           </div>
         </div>
         <div>
-          <label className="text-xs tracking-widest text-muted block mb-1">正文</label>
+          <label className="text-xs tracking-widest text-muted block mb-1">{t.ctLabelBody}</label>
           <div className="space-y-2">
             <textarea
               className="w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
               rows={2}
               value={homeSeo.body.ko}
               onChange={(e) => setHomeSeo((s) => ({ ...s, body: { ...s.body, ko: e.target.value } }))}
-              placeholder="韩语正文（留空用默认）"
+              placeholder={t.ctPhBodyKo}
             />
             <textarea
               className="w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
               rows={2}
               value={homeSeo.body.zh}
               onChange={(e) => setHomeSeo((s) => ({ ...s, body: { ...s.body, zh: e.target.value } }))}
-              placeholder="中文正文（留空用默认）"
+              placeholder={t.ctPhBodyZh}
             />
             <textarea
               className="w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
               rows={2}
               value={homeSeo.body.en}
               onChange={(e) => setHomeSeo((s) => ({ ...s, body: { ...s.body, en: e.target.value } }))}
-              placeholder="英语正文（留空用默认）"
+              placeholder={t.ctPhBodyEn}
             />
           </div>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={saveHomeSeo} disabled={homeSeoSaving} className="btn-gold">
-            {homeSeoSaving ? '保存中…' : '保存介绍文案'}
+            {homeSeoSaving ? t.ctSaving : t.ctSaveHome}
           </button>
-          {homeSeoSaved && <span className="text-xs text-emerald-600">✓ 已保存</span>}
+          {homeSeoSaved && <span className="text-xs text-emerald-600">✓ {t.ctSaved}</span>}
         </div>
       </section>
 
       {/* 固定页面正文（隐私政策 / 服务条款等） */}
       <section className="border border-line bg-surface p-5 space-y-5 max-w-3xl">
         <div>
-          <h2 className="font-display text-xl text-ink">页面正文（条款与政策）</h2>
-          <p className="text-xs text-muted mt-1">
-            页脚「客户服务」「条款与政策」点进去的页面内容都在这里填。
-            每个页面<b>分韩文 / 中文 / 英文三套</b>，<b>空行即分段</b>；
-            哪套不填，前台就显示默认占位文案。保存后前台刷新即生效。
-          </p>
+          <h2 className="font-display text-xl text-ink">{t.ctInfoSection}</h2>
+          <p className="text-xs text-muted mt-1">{t.ctInfoHint}</p>
         </div>
 
         <div className="space-y-6">
@@ -336,12 +327,13 @@ export default function AdminContentPage() {
             const v = infoPages[def.slug] ?? { ko: '', zh: '', en: '' };
             const set = (loc: 'ko' | 'zh' | 'en', val: string) =>
               setInfoPages((s) => ({ ...s, [def.slug]: { ...v, [loc]: val } }));
-            const name = def.label.split('（')[0];
+            const label = t[def.key];
+            const name = label.split(/[（(]/)[0];
             const langLabel = (loc: 'ko' | 'zh' | 'en') =>
-              loc === 'ko' ? '韩文' : loc === 'zh' ? '中文' : '英文';
+              loc === 'ko' ? t.ctLangKo : loc === 'zh' ? t.ctLangZh : t.ctLangEn;
             return (
               <div key={def.slug} className="border border-line p-4 space-y-2">
-                <div className="text-sm font-medium text-ink">{def.label}</div>
+                <div className="text-sm font-medium text-ink">{label}</div>
                 {(['ko', 'zh', 'en'] as const).map((loc) => (
                   <div key={loc}>
                     <span className="text-[10px] text-muted block mb-0.5">{langLabel(loc)}</span>
@@ -350,7 +342,7 @@ export default function AdminContentPage() {
                       rows={8}
                       value={v[loc]}
                       onChange={(e) => set(loc, e.target.value)}
-                      placeholder={`${name} · ${langLabel(loc)}正文（留空显示默认）`}
+                      placeholder={t.ctPhInfoBody.replace('{name}', name).replace('{lang}', langLabel(loc))}
                     />
                   </div>
                 ))}
@@ -361,43 +353,40 @@ export default function AdminContentPage() {
 
         <div className="flex items-center gap-3">
           <button onClick={saveInfoPages} disabled={infoSaving} className="btn-gold">
-            {infoSaving ? '保存中…' : '保存页面正文'}
+            {infoSaving ? t.ctSaving : t.ctSaveInfo}
           </button>
-          {infoSaved && <span className="text-xs text-emerald-600">✓ 已保存</span>}
+          {infoSaved && <span className="text-xs text-emerald-600">✓ {t.ctSaved}</span>}
         </div>
       </section>
 
       {/* 页脚管理 */}
       <section className="border border-line bg-surface p-5 space-y-5 max-w-3xl">
         <div>
-          <h2 className="font-display text-xl text-ink">页脚管理</h2>
-          <p className="text-xs text-muted mt-1">
-            网站最底部黑色区域的全部内容都在这里改。文字项<b>分韩文 / 中文两套填写</b>，
-            哪套留空就用哪套的默认值；链接地址（URL）不分语言填一套即可。
-          </p>
+          <h2 className="font-display text-xl text-ink">{t.ctFooterSection}</h2>
+          <p className="text-xs text-muted mt-1">{t.ctFooterHint}</p>
         </div>
 
         <div className="space-y-4">
           {/* 品牌名（双语） */}
           <div>
-            <label className="text-xs tracking-widest text-muted block mb-1">品牌名</label>
+            <label className="text-xs tracking-widest text-muted block mb-1">{t.ctBrandName}</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <span className="text-[10px] text-muted block mb-0.5">韩文</span>
+                <span className="text-[10px] text-muted block mb-0.5">{t.ctLangKo}</span>
                 <input
                   className={footerInput}
                   value={footer.brandName.ko}
                   onChange={(e) => setFooter((f) => ({ ...f, brandName: { ...f.brandName, ko: e.target.value } }))}
-                  placeholder="기본값: J&D"
+                  placeholder={t.ctDefaultJD}
                 />
               </div>
               <div>
-                <span className="text-[10px] text-muted block mb-0.5">中文</span>
+                <span className="text-[10px] text-muted block mb-0.5">{t.ctLangZh}</span>
                 <input
                   className={footerInput}
                   value={footer.brandName.zh}
                   onChange={(e) => setFooter((f) => ({ ...f, brandName: { ...f.brandName, zh: e.target.value } }))}
-                  placeholder="默认：J&D"
+                  placeholder={t.ctDefaultJD}
                 />
               </div>
             </div>
@@ -406,45 +395,45 @@ export default function AdminContentPage() {
           {/* YouTube / Instagram（URL 单套） */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">YouTube 链接</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.ctYoutube}</label>
               <input
                 className={footerInput}
                 value={footer.youtube}
                 onChange={(e) => setFooter((f) => ({ ...f, youtube: e.target.value }))}
-                placeholder="默认读取站点配置"
+                placeholder={t.ctPhDefault}
               />
             </div>
             <div>
-              <label className="text-xs tracking-widest text-muted block mb-1">Instagram 链接</label>
+              <label className="text-xs tracking-widest text-muted block mb-1">{t.ctInstagram}</label>
               <input
                 className={footerInput}
                 value={footer.instagram}
                 onChange={(e) => setFooter((f) => ({ ...f, instagram: e.target.value }))}
-                placeholder="默认读取站点配置"
+                placeholder={t.ctPhDefault}
               />
             </div>
           </div>
 
           {/* 联系信息行（双语） */}
           <div>
-            <label className="text-xs tracking-widest text-muted block mb-1">联系信息行</label>
+            <label className="text-xs tracking-widest text-muted block mb-1">{t.ctContactRow}</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <span className="text-[10px] text-muted block mb-0.5">韩文</span>
+                <span className="text-[10px] text-muted block mb-0.5">{t.ctLangKo}</span>
                 <input
                   className={footerInput}
                   value={footer.contactLine.ko}
                   onChange={(e) => setFooter((f) => ({ ...f, contactLine: { ...f.contactLine, ko: e.target.value } }))}
-                  placeholder="기본값: cs@jand.golf · 전화"
+                  placeholder={t.ctPhContact}
                 />
               </div>
               <div>
-                <span className="text-[10px] text-muted block mb-0.5">中文</span>
+                <span className="text-[10px] text-muted block mb-0.5">{t.ctLangZh}</span>
                 <input
                   className={footerInput}
                   value={footer.contactLine.zh}
                   onChange={(e) => setFooter((f) => ({ ...f, contactLine: { ...f.contactLine, zh: e.target.value } }))}
-                  placeholder="默认：cs@jand.golf · 电话"
+                  placeholder={t.ctPhContact}
                 />
               </div>
             </div>
@@ -452,26 +441,26 @@ export default function AdminContentPage() {
 
           {/* 品牌简介（双语） */}
           <div>
-            <label className="text-xs tracking-widest text-muted block mb-1">品牌简介</label>
+            <label className="text-xs tracking-widest text-muted block mb-1">{t.ctBrandIntro}</label>
             <div className="space-y-2">
               <div>
-                <span className="text-[10px] text-muted block mb-0.5">韩文</span>
+                <span className="text-[10px] text-muted block mb-0.5">{t.ctLangKo}</span>
                 <textarea
                   className={footerInput}
                   rows={2}
                   value={footer.brandDesc.ko}
                   onChange={(e) => setFooter((f) => ({ ...f, brandDesc: { ...f.brandDesc, ko: e.target.value } }))}
-                  placeholder="기본값: J&D은 합리적인 가격으로 남녀 골프 의류…"
+                  placeholder={t.ctPhBrandIntro}
                 />
               </div>
               <div>
-                <span className="text-[10px] text-muted block mb-0.5">中文</span>
+                <span className="text-[10px] text-muted block mb-0.5">{t.ctLangZh}</span>
                 <textarea
                   className={footerInput}
                   rows={2}
                   value={footer.brandDesc.zh}
                   onChange={(e) => setFooter((f) => ({ ...f, brandDesc: { ...f.brandDesc, zh: e.target.value } }))}
-                  placeholder="默认：J&D 以合理的价格提供男女高尔夫服饰、外套、针织、帽子、包袋等高级高尔夫时尚…"
+                  placeholder={t.ctPhBrandIntro}
                 />
               </div>
             </div>
@@ -479,24 +468,24 @@ export default function AdminContentPage() {
 
           {/* 版权行（双语） */}
           <div>
-            <label className="text-xs tracking-widest text-muted block mb-1">版权行</label>
+            <label className="text-xs tracking-widest text-muted block mb-1">{t.ctCopyright}</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <span className="text-[10px] text-muted block mb-0.5">韩文</span>
+                <span className="text-[10px] text-muted block mb-0.5">{t.ctLangKo}</span>
                 <input
                   className={footerInput}
                   value={footer.copyright.ko}
                   onChange={(e) => setFooter((f) => ({ ...f, copyright: { ...f.copyright, ko: e.target.value } }))}
-                  placeholder="기본값: 저작권 J&D — 2026 J&D"
+                  placeholder={t.ctPhCopyright}
                 />
               </div>
               <div>
-                <span className="text-[10px] text-muted block mb-0.5">中文</span>
+                <span className="text-[10px] text-muted block mb-0.5">{t.ctLangZh}</span>
                 <input
                   className={footerInput}
                   value={footer.copyright.zh}
                   onChange={(e) => setFooter((f) => ({ ...f, copyright: { ...f.copyright, zh: e.target.value } }))}
-                  placeholder="默认：版权所有 J&D — 2026 J&D — 保留所有权利"
+                  placeholder={t.ctPhCopyright}
                 />
               </div>
             </div>
@@ -505,13 +494,13 @@ export default function AdminContentPage() {
 
         {/* 三栏链接 */}
         <div className="space-y-4">
-          <p className="text-xs tracking-widest text-muted">链接栏目（默认三栏，标题与标签均分韩/中填写，留空用默认）</p>
+          <p className="text-xs tracking-widest text-muted">{t.ctLinksSection}</p>
           {footer.columns.map((col, ci) => (
             <div key={ci} className="border border-line p-4 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted w-14 shrink-0">第 {ci + 1} 栏</span>
+                <span className="text-xs text-muted w-14 shrink-0">{t.ctColN.replace('{n}', String(ci + 1))}</span>
                 <div className="flex-1 min-w-[180px]">
-                  <span className="text-[10px] text-muted block mb-0.5">栏目标题 · 韩文</span>
+                  <span className="text-[10px] text-muted block mb-0.5">{t.ctColTitleKo}</span>
                   <input
                     className={footerInput}
                     value={col.title.ko}
@@ -522,11 +511,11 @@ export default function AdminContentPage() {
                         return { ...f, columns };
                       })
                     }
-                    placeholder="기본값: 브랜드 소개"
+                    placeholder={t.ctPhColTitle}
                   />
                 </div>
                 <div className="flex-1 min-w-[180px]">
-                  <span className="text-[10px] text-muted block mb-0.5">栏目标题 · 中文</span>
+                  <span className="text-[10px] text-muted block mb-0.5">{t.ctColTitleZh}</span>
                   <input
                     className={footerInput}
                     value={col.title.zh}
@@ -537,7 +526,7 @@ export default function AdminContentPage() {
                         return { ...f, columns };
                       })
                     }
-                    placeholder="默认：关于品牌"
+                    placeholder={t.ctPhColTitle}
                   />
                 </div>
                 <button
@@ -554,14 +543,14 @@ export default function AdminContentPage() {
                   }
                   className="text-xs px-3 py-1.5 border border-line hover:border-ink whitespace-nowrap self-end mb-0.5"
                 >
-                  + 链接
+                  {t.ctAddLink}
                 </button>
               </div>
               {col.links.map((l, li) => (
                 <div key={li} className="space-y-2 pl-0 sm:pl-14">
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <span className="text-[10px] text-muted block mb-0.5">标签 · 韩文</span>
+                      <span className="text-[10px] text-muted block mb-0.5">{t.ctTagKo}</span>
                       <input
                         className={footerInput}
                         value={l.label.ko}
@@ -574,11 +563,11 @@ export default function AdminContentPage() {
                             return { ...f, columns };
                           })
                         }
-                        placeholder="예: 브랜드"
+                        placeholder={t.ctPhTag}
                       />
                     </div>
                     <div className="flex-1">
-                      <span className="text-[10px] text-muted block mb-0.5">标签 · 中文</span>
+                      <span className="text-[10px] text-muted block mb-0.5">{t.ctTagZh}</span>
                       <input
                         className={footerInput}
                         value={l.label.zh}
@@ -591,7 +580,7 @@ export default function AdminContentPage() {
                             return { ...f, columns };
                           })
                         }
-                        placeholder="例：品牌"
+                        placeholder={t.ctPhTag}
                       />
                     </div>
                   </div>
@@ -608,7 +597,7 @@ export default function AdminContentPage() {
                           return { ...f, columns };
                         })
                       }
-                      placeholder="地址（不分语言），如 /brands"
+                      placeholder={t.ctPhUrl}
                     />
                     <button
                       type="button"
@@ -622,7 +611,7 @@ export default function AdminContentPage() {
                       }
                       className="text-xs px-2 py-1.5 border border-line hover:border-red-500 text-red-600 shrink-0"
                     >
-                      删
+                      {t.ctDel}
                     </button>
                   </div>
                 </div>
@@ -633,9 +622,9 @@ export default function AdminContentPage() {
 
         <div className="flex items-center gap-3">
           <button onClick={saveFooter} disabled={footerSaving} className="btn-gold">
-            {footerSaving ? '保存中…' : '保存页脚'}
+            {footerSaving ? t.ctSaving : t.ctSaveFooter}
           </button>
-          {footerSaved && <span className="text-xs text-emerald-600">✓ 已保存，刷新前台即可看到</span>}
+          {footerSaved && <span className="text-xs text-emerald-600">✓ {t.ctSavedRefresh}</span>}
         </div>
       </section>
 
@@ -643,10 +632,8 @@ export default function AdminContentPage() {
       <section>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="font-display text-xl text-ink">活动页面</h2>
-            <p className="text-xs text-muted mt-1">
-              「活动」页面的内容在这里维护，支持韩语 + 中文双语、配图和跳转链接。
-            </p>
+            <h2 className="font-display text-xl text-ink">{t.ctEventSection}</h2>
+            <p className="text-xs text-muted mt-1">{t.ctEventIntro}</p>
           </div>
           <button
             onClick={() => {
@@ -656,12 +643,12 @@ export default function AdminContentPage() {
             }}
             className="btn-gold"
           >
-            + 新建活动
+            + {t.ctNewEvent}
           </button>
         </div>
 
         {loading ? (
-          <p className="text-muted text-sm">加载中…</p>
+          <p className="text-muted text-sm">{t.ctEventLoading}</p>
         ) : (
           <div className="border border-line divide-y divide-line max-w-3xl">
             {events.map((e) => (
@@ -678,8 +665,8 @@ export default function AdminContentPage() {
                     {e.titleZh && <span className="text-muted"> / {e.titleZh}</span>}
                   </p>
                   <p className="text-xs text-muted truncate">
-                    #{e.order} · {e.status === 'published' ? '已上架' : '草稿'}
-                    {e.badge && ` · 角标 ${e.badge}`}
+                    #{e.order} · {e.status === 'published' ? t.ctPublished : t.ctDraft}
+                    {e.badge && t.ctEventBadge.replace('{b}', e.badge)}
                     {e.href && ` · ${e.href}`}
                   </p>
                 </div>
@@ -691,20 +678,18 @@ export default function AdminContentPage() {
                   }}
                   className="text-xs px-3 py-1.5 border border-line hover:border-ink"
                 >
-                  编辑
+                  {t.edit}
                 </button>
                 <button
                   onClick={() => removeEvent(e.id)}
                   className="text-xs px-3 py-1.5 border border-line hover:border-red-500 text-red-600"
                 >
-                  删除
+                  {t.delete}
                 </button>
               </div>
             ))}
             {events.length === 0 && (
-              <p className="p-5 text-sm text-muted">
-                还没有活动内容 — 前台「活动」页显示默认文案。点「新建活动」添加第一条。
-              </p>
+              <p className="p-5 text-sm text-muted">{t.ctEventEmpty}</p>
             )}
           </div>
         )}
@@ -737,7 +722,8 @@ function EventForm({
   onClose: () => void;
   onSaved: (e: EventItem) => void;
 }) {
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const [form, setForm] = useState({
     title: editing?.title ?? '',
     titleZh: editing?.titleZh ?? '',
@@ -757,7 +743,7 @@ function EventForm({
     e.preventDefault();
     setErr('');
     if (!form.title.trim()) {
-      setErr('请填写活动标题（韩语）');
+      setErr(t.ctErrEventTitle);
       return;
     }
     setSaving(true);
@@ -799,7 +785,7 @@ function EventForm({
       >
         <div className="flex justify-between items-center">
           <h2 className="font-display text-2xl text-ink">
-            {editing ? '编辑活动' : '新建活动'}
+            {editing ? t.ctEventEdit : t.ctEventNew}
           </h2>
           <button type="button" onClick={onClose} className="text-muted hover:text-ink">
             ✕
@@ -808,44 +794,44 @@ function EventForm({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={label}>标题（韩语）*</label>
+            <label className={label}>{t.ctEventTitleKo} *</label>
             <input className={input} value={form.title} onChange={(e) => set('title', e.target.value)} required />
           </div>
           <div>
-            <label className={label}>标题（中文）</label>
+            <label className={label}>{t.ctEventTitleZh}</label>
             <input className={input} value={form.titleZh} onChange={(e) => set('titleZh', e.target.value)} />
           </div>
           <div>
-            <label className={label}>副标题（韩语）</label>
+            <label className={label}>{t.ctEventSubKo}</label>
             <input className={input} value={form.subtitle} onChange={(e) => set('subtitle', e.target.value)} />
           </div>
           <div>
-            <label className={label}>副标题（中文）</label>
+            <label className={label}>{t.ctEventSubZh}</label>
             <input className={input} value={form.subtitleZh} onChange={(e) => set('subtitleZh', e.target.value)} />
           </div>
           <div>
-            <label className={label}>角标（如 LIVE / NEW）</label>
+            <label className={label}>{t.ctEventBadgeLabel}</label>
             <input className={input} value={form.badge} onChange={(e) => set('badge', e.target.value)} />
           </div>
           <div>
-            <label className={label}>跳转链接（可选）</label>
+            <label className={label}>{t.ctEventLinkLabel}</label>
             <input className={input} value={form.href} onChange={(e) => set('href', e.target.value)} placeholder="/products" />
           </div>
           <div>
-            <label className={label}>排序（小的在前）</label>
+            <label className={label}>{t.ctEventOrderLabel}</label>
             <input type="number" className={input} value={form.order} onChange={(e) => set('order', e.target.value)} />
           </div>
           <div>
-            <label className={label}>状态</label>
+            <label className={label}>{t.ctStatusLabel}</label>
             <select className={input} value={form.status} onChange={(e) => set('status', e.target.value)}>
-              <option value="published">已上架</option>
-              <option value="draft">草稿</option>
+              <option value="published">{t.ctPublished}</option>
+              <option value="draft">{t.ctDraft}</option>
             </select>
           </div>
         </div>
 
         <div>
-          <label className={label}>配图（可选）</label>
+          <label className={label}>{t.ctEventImageLabel}</label>
           <div className="flex items-center gap-3">
             {form.imageUrl && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -870,18 +856,16 @@ function EventForm({
               }}
             />
           </div>
-          <p className="text-[10px] text-muted mt-1">
-            建议尺寸 1200×630（横图，活动卡片顶部展示）；单张 ≤10MB
-          </p>
+          <p className="text-[10px] text-muted mt-1">{t.ctEventImageSpec}</p>
         </div>
 
         {err && <p className="text-sm text-red-600">{err}</p>}
         <div className="flex gap-3 pt-2">
           <button type="submit" disabled={saving} className="btn-gold">
-            {saving ? '保存中…' : t.save}
+            {saving ? t.ctSaving : t.save}
           </button>
           <button type="button" onClick={onClose} className="btn-outline">
-            取消
+            {t.cancel}
           </button>
         </div>
       </form>

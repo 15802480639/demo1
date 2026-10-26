@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 import type { GeoAudit, GeoCheck } from '@/lib/geo-audit';
 
 const ICON: Record<GeoCheck['status'], string> = {
@@ -18,27 +17,11 @@ const STYLE: Record<GeoCheck['status'], string> = {
   fail: 'border-red-200 bg-red-50 text-red-800',
 };
 
-const DIM_LABEL_ZH: Record<string, string> = {
-  entity: '实体清晰度',
-  schema: '结构化数据',
-  content: '内容可引用性',
-  index: '索引通道',
-  multi: '多语覆盖',
-  authority: '权威信号',
-};
-
-const DIM_DESC: Record<string, string> = {
-  entity: 'AI 能不能确认「你是谁、你是哪家公司」——所有引用的地基',
-  schema: '机器可读的结构化数据，决定 AI 能否直接抽取商品信息',
-  content: '有没有足够「可被引用」的文字素材',
-  index: '让 AI 能抓到你的通道是否全部打开',
-  multi: '三种语言的用户问三种语言的问题，答案要分语种',
-  authority: '站外第三方共识 —— 决定能被引用的上限，最难做但最关键',
-};
+const DIM_KEYS = ['entity', 'schema', 'content', 'index', 'multi', 'authority'] as const;
 
 export default function GeoHealthCheck({ audit }: { audit: GeoAudit }) {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [pushMsg, setPushMsg] = useState('');
@@ -81,6 +64,31 @@ export default function GeoHealthCheck({ audit }: { audit: GeoAudit }) {
       : audit.total >= 55
         ? 'text-amber-600'
         : 'text-red-600';
+
+  const dimLabel = (key: string) =>
+    key === 'schema'
+      ? t.ghSchema
+      : key === 'content'
+        ? t.ghContent
+        : key === 'index'
+          ? t.ghIndex
+          : key === 'multi'
+            ? t.ghMulti
+            : key === 'authority'
+              ? t.ghAuthority
+              : t.ghEntity;
+  const dimDesc = (key: string) =>
+    key === 'schema'
+      ? t.ghSchemaDesc
+      : key === 'content'
+        ? t.ghContentDesc
+        : key === 'index'
+          ? t.ghIndexDesc
+          : key === 'multi'
+            ? t.ghMultiDesc
+            : key === 'authority'
+              ? t.ghAuthorityDesc
+              : t.ghEntityDesc;
 
   return (
     <div>
@@ -141,14 +149,14 @@ export default function GeoHealthCheck({ audit }: { audit: GeoAudit }) {
           <section key={d.key} className="border border-line bg-surface p-5">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="font-display text-xl text-ink">
-                {DIM_LABEL_ZH[d.key] ?? d.nameZh}
+                {dimLabel(d.key) ?? d.nameZh}
               </h2>
               <span className="text-sm text-muted">
                 {d.score}
                 <span className="text-xs"> / {d.weight}</span>
               </span>
             </div>
-            <p className="text-xs text-muted mt-1 mb-3">{DIM_DESC[d.key]}</p>
+            <p className="text-xs text-muted mt-1 mb-3">{dimDesc(d.key)}</p>
 
             <div className="h-1 bg-line mb-4">
               <div

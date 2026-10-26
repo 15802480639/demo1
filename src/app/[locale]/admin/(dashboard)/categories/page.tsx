@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { getDictionary } from '@/i18n/dictionaries';
 import { useLocale } from '@/components/i18n/locale-provider';
 
 type Category = {
@@ -43,8 +42,8 @@ function buildRows(list: Category[]) {
 }
 
 export default function AdminCategoriesPage() {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const [list, setList] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Category | null>(null);
@@ -67,7 +66,7 @@ export default function AdminCategoriesPage() {
     const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const d = await res.json().catch(() => null);
-      alert(d?.message ?? '删除失败（分类可能正在被使用）');
+      alert(d?.message ?? t.catErrInUse);
       return;
     }
     load();
@@ -80,10 +79,7 @@ export default function AdminCategoriesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-3xl text-ink">{t.categories}</h1>
-          <p className="text-xs text-muted mt-1">
-            分类是商品管理的上层结构，支持最多 3 级（一级 → 二级 → 三级）。
-            名称支持韩语 + 中文双语。
-          </p>
+          <p className="text-xs text-muted mt-1">{t.catIntro}</p>
         </div>
         <button
           onClick={() => {
@@ -93,12 +89,12 @@ export default function AdminCategoriesPage() {
           }}
           className="btn-gold"
         >
-          + 新建分类
+          + {t.catNewTitle}
         </button>
       </div>
 
       {loading ? (
-        <p className="text-muted">加载中…</p>
+        <p className="text-muted">{t.cLoading}</p>
       ) : (
         <div className="border border-line divide-y divide-line">
           {rows.map(({ node: c, depth }) => (
@@ -117,11 +113,14 @@ export default function AdminCategoriesPage() {
                   {c.name}
                   {c.nameZh && <span className="text-muted"> / {c.nameZh}</span>}
                   <span className="ml-2 text-[10px] text-accent border border-accent/40 px-1.5 py-0.5 align-middle">
-                    {depth} 级
+                    {t.catLevel.replace('{n}', String(depth))}
                   </span>
                 </p>
                 <p className="text-xs text-muted">
-                  /{c.slug} · 排序 {c.sortOrder} · {c._count?.products ?? 0} 个商品
+                  {t.catMeta
+                    .replace('{slug}', c.slug)
+                    .replace('{n}', String(c.sortOrder))
+                    .replace('{c}', String(c._count?.products ?? 0))}
                 </p>
               </div>
               <button
@@ -132,18 +131,18 @@ export default function AdminCategoriesPage() {
                 }}
                 className="text-xs px-3 py-1.5 border border-line hover:border-ink"
               >
-                编辑
+                {t.edit}
               </button>
               <button
                 onClick={() => remove(c.id)}
                 className="text-xs px-3 py-1.5 border border-line hover:border-red-500 text-red-600"
               >
-                删除
+                {t.delete}
               </button>
             </div>
           ))}
           {rows.length === 0 && (
-            <p className="p-5 text-sm text-muted">暂无分类，点右上角「新建分类」创建。</p>
+            <p className="p-5 text-sm text-muted">{t.catEmpty}</p>
           )}
         </div>
       )}
@@ -175,7 +174,8 @@ function CategoryForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const [name, setName] = useState(editing?.name ?? '');
   const [nameZh, setNameZh] = useState(editing?.nameZh ?? '');
   const [slug, setSlug] = useState(editing?.slug ?? '');
@@ -243,7 +243,7 @@ function CategoryForm({
     e.preventDefault();
     setErr('');
     if (!name.trim()) {
-      setErr('请填写分类名称（韩语）');
+      setErr(t.catErrName);
       return;
     }
     setSaving(true);
@@ -290,7 +290,7 @@ function CategoryForm({
       >
         <div className="flex justify-between items-center">
           <h2 className="font-display text-2xl text-ink">
-            {editing ? '编辑分类' : '新建分类'}
+            {editing ? t.catEditTitle : t.catNewTitle}
           </h2>
           <button type="button" onClick={onClose} className="text-muted hover:text-ink">
             ✕
@@ -299,21 +299,21 @@ function CategoryForm({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={label}>名称（韩语）*</label>
+            <label className={label}>{t.catNameKo}</label>
             <input className={input} value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div>
-            <label className={label}>名称（中文）</label>
+            <label className={label}>{t.catNameZh}</label>
             <input className={input} value={nameZh} onChange={(e) => setNameZh(e.target.value)} />
           </div>
           {!editing && (
             <div>
-              <label className={label}>URL slug（留空自动生成）</label>
+              <label className={label}>{t.catSlug}</label>
               <input className={input} value={slug} onChange={(e) => setSlug(e.target.value)} />
             </div>
           )}
           <div>
-            <label className={label}>排序（小的在前）</label>
+            <label className={label}>{t.catOrder}</label>
             <input
               type="number"
               className={input}
@@ -322,28 +322,26 @@ function CategoryForm({
             />
           </div>
           <div className="col-span-2">
-            <label className={label}>上级分类（留空 = 一级分类）</label>
+            <label className={label}>{t.catParent}</label>
             <select className={input} value={parentId} onChange={(e) => setParentId(e.target.value)}>
-              <option value="">— 无（一级分类）—</option>
+              <option value="">{t.catNone}</option>
               {parentOptions.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-muted mt-1.5">
-              最多 3 级：一级分类可直接建子级，二级分类下可再建一级子级。
-            </p>
+            <p className="text-[11px] text-muted mt-1.5">{t.catDepthHint}</p>
           </div>
         </div>
 
         {err && <p className="text-sm text-red-600">{err}</p>}
         <div className="flex gap-3 pt-2">
           <button type="submit" disabled={saving} className="btn-gold">
-            {saving ? '保存中…' : t.save}
+            {saving ? t.saving : t.save}
           </button>
           <button type="button" onClick={onClose} className="btn-outline">
-            取消
+            {t.cancel}
           </button>
         </div>
       </form>

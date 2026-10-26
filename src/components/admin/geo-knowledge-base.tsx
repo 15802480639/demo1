@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 import GeoFactEditor from '@/components/admin/geo-fact-editor';
 import type { Locale } from '@/i18n/config';
 
@@ -34,8 +33,8 @@ export default function GeoKnowledgeBase({
   loc: Locale;
   stats: { faqCount: number; productCount: number; categoryCount: number };
 }) {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
 
   const [faqs, setFaqs] = useState<Faq[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,7 +222,7 @@ export default function GeoKnowledgeBase({
               rel="noreferrer"
               className="text-accent hover:underline"
             >
-              常见问题
+              {t.gkCommonFaq}
             </a>
             <a
               href={`/${loc}/admin/geo-audit`}
@@ -323,9 +322,9 @@ export default function GeoKnowledgeBase({
                 onChange={(e) => setForm({ ...form, locale: e.target.value })}
               >
                 <option value="">{t.allLocales}</option>
-                <option value="ko">한국어</option>
-                <option value="zh">中文</option>
-                <option value="en">English</option>
+                <option value="ko">{t.langNameKo}</option>
+                <option value="zh">{t.langNameZh}</option>
+                <option value="en">{t.langNameEn}</option>
               </select>
             </div>
             <div>
@@ -399,7 +398,7 @@ export default function GeoKnowledgeBase({
 
           <div className="border border-line divide-y divide-line mt-3">
             {loading ? (
-              <p className="p-5 text-sm text-muted">加载中…</p>
+              <p className="p-5 text-sm text-muted">{t.gkLoading}</p>
             ) : filtered.length === 0 ? (
               <p className="p-5 text-sm text-muted">{t.noFaqs}</p>
             ) : (

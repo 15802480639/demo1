@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { getDictionary } from '@/i18n/dictionaries';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { formatPrice } from '@/lib/format';
 import { productStatusLabel } from '@/lib/order-labels';
@@ -106,8 +105,8 @@ function specsFromSkus(skus: Sku[]): { name: string; nameZh?: string; values: { 
 }
 
 export default function AdminProductsPage() {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { locale, dict } = useLocale();
+  const t = dict.admin;
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [brands, setBrands] = useState<Option[]>([]);
   const [categories, setCategories] = useState<Option[]>([]);
@@ -187,12 +186,10 @@ export default function AdminProductsPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="font-display text-3xl text-ink">{t.products}</h1>
-          <p className="text-xs text-muted mt-1">
-            商品挂在「分类管理」的分类下；点「编辑」可管理规格（SKU）、上传图片、填写中韩双语名称。
-          </p>
+          <p className="text-xs text-muted mt-1">{t.pIntro}</p>
         </div>
         <button onClick={openNew} className="btn-gold">
-          + 新增商品
+          + {t.newProduct}
         </button>
       </div>
 
@@ -201,11 +198,11 @@ export default function AdminProductsPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="搜索：商品名 / 货号 / slug"
+          placeholder={t.pSearchPh}
           className="border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent w-64"
         />
         <select className={select} value={fCat} onChange={(e) => setFCat(e.target.value)}>
-          <option value="">全部分类</option>
+          <option value="">{t.pAllCats}</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -213,18 +210,18 @@ export default function AdminProductsPage() {
           ))}
         </select>
         <select className={select} value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
-          <option value="">全部状态</option>
-          <option value="active">在售</option>
-          <option value="draft">草稿</option>
-          <option value="archived">已归档</option>
+          <option value="">{t.pAllStatus}</option>
+          <option value="active">{t.active}</option>
+          <option value="draft">{t.draft}</option>
+          <option value="archived">{t.archived}</option>
         </select>
         <span className="text-xs text-muted self-center">
-          {filtered.length} / {products.length} 个商品
+          {filtered.length} / {products.length} {t.pUnit}
         </span>
       </div>
 
       {loading ? (
-        <p className="text-muted">加载中…</p>
+        <p className="text-muted">{t.pLoading}</p>
       ) : (
         <div className="border border-line divide-y divide-line">
           {pageItems.map((p) => {
@@ -244,21 +241,21 @@ export default function AdminProductsPage() {
                   </p>
                   <p className="text-xs text-muted">
                     {p.code || '—'} · {p.brand?.name ?? '—'} · {p.category?.name ?? '—'} ·{' '}
-                    {p.skus.length} 个规格
+                    {p.skus.length} {t.pSkuUnit}
                     {grantedCouponCodes(p.grantCouponIds, coupons).length > 0 &&
-                      ` · 赠券 ${grantedCouponCodes(p.grantCouponIds, coupons).join('、')}`}
+                      ` · ${t.pGrantLabel} ${grantedCouponCodes(p.grantCouponIds, coupons).join('、')}`}
                   </p>
                   <p className="text-[11px] text-muted mt-0.5">
-                    积分：
+                    {t.pEarnLabel}
                     {p.earnPoints
                       ? p.earnType === 'fixed'
-                        ? `每件返 ${p.earnValue} 分`
+                        ? t.pEarnFixed.replace('{n}', String(p.earnValue))
                         : p.earnValue > 0
-                          ? `返 ${p.earnValue}%`
-                          : '返积分（用全局比例）'
-                      : '不返积分'}
+                          ? t.pEarnPercent.replace('{n}', String(p.earnValue))
+                          : t.pEarnGlobal
+                      : t.pNoEarn}
                     {' · '}
-                    {p.usePoints ? '可用积分抵扣' : '不可用积分抵扣'}
+                    {p.usePoints ? t.pUseYes : t.pUseNo}
                   </p>
                 </div>
                 <span className="text-sm w-28 text-right">
@@ -269,26 +266,26 @@ export default function AdminProductsPage() {
                     p.status === 'active' ? 'text-accent' : 'text-muted'
                   }`}
                 >
-                  {productStatusLabel(p.status)}
+                  {productStatusLabel(p.status, locale)}
                 </span>
                 <button
                   onClick={() => openEdit(p)}
                   className="text-xs px-3 py-1.5 border border-line hover:border-ink"
                 >
-                  编辑
+                  {t.edit}
                 </button>
                 <button
                   onClick={() => remove(p.id)}
                   className="text-xs px-3 py-1.5 border border-line hover:border-red-500 text-red-600"
                 >
-                  删除
+                  {t.delete}
                 </button>
               </div>
             );
           })}
           {filtered.length === 0 && (
             <p className="p-5 text-sm text-muted">
-              {products.length === 0 ? '还没有商品，点右上角「新增商品」创建。' : '没有符合筛选条件的商品。'}
+              {products.length === 0 ? t.pEmpty : t.pNoMatch}
             </p>
           )}
         </div>
@@ -302,17 +299,20 @@ export default function AdminProductsPage() {
             disabled={safePage <= 1}
             className="px-3 py-1.5 border border-line hover:border-ink disabled:opacity-40"
           >
-            上一页
+            {t.pPrev}
           </button>
           <span className="text-muted text-xs">
-            第 {safePage} / {totalPages} 页 · 共 {filtered.length} 条
+            {t.pPageInfo
+              .replace('{a}', String(safePage))
+              .replace('{b}', String(totalPages))
+              .replace('{n}', String(filtered.length))}
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={safePage >= totalPages}
             className="px-3 py-1.5 border border-line hover:border-ink disabled:opacity-40"
           >
-            下一页
+            {t.pNext}
           </button>
         </div>
       )}
@@ -350,7 +350,8 @@ function ProductForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const [name, setName] = useState(editing?.name ?? '');
   const [nameZh, setNameZh] = useState(editing?.nameZh ?? '');
   const [code, setCode] = useState(editing?.code ?? '');
@@ -486,7 +487,7 @@ function ProductForm({
   function generateSkuMatrix() {
     const valid = specs.filter((sp) => sp.name.trim() && sp.values.some((v) => v.ko.trim()));
     if (valid.length === 0) {
-      setErr('请先填写至少一个规格名和它的规格值');
+      setErr(t.pErrSpec);
       return;
     }
     let combos: Record<string, string>[] = [{}];
@@ -527,7 +528,7 @@ function ProductForm({
     e.preventDefault();
     setErr('');
     if (!name || !categoryId || !(Number(price) > 0)) {
-      setErr('请填写：商品名（韩语）、分类、价格');
+      setErr(t.pErrBase);
       return;
     }
     setSaving(true);
@@ -609,7 +610,7 @@ function ProductForm({
       >
         <div className="flex justify-between items-center">
           <h2 className="font-display text-2xl text-ink">
-            {editing ? '编辑商品' : '新增商品'}
+            {editing ? t.editProduct : t.newProduct}
           </h2>
           <button type="button" onClick={onClose} className="text-muted hover:text-ink">
             ✕
@@ -618,11 +619,11 @@ function ProductForm({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <label className={label}>商品名（韩语）*</label>
+            <label className={label}>{t.pNameKo}</label>
             <input className={input} value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="col-span-2">
-            <label className={label}>商品名（中文）— 中文页面优先显示</label>
+            <label className={label}>{t.pNameZh}</label>
             <input className={input} value={nameZh} onChange={(e) => setNameZh(e.target.value)} />
           </div>
           <div>
@@ -630,16 +631,16 @@ function ProductForm({
             <input className={input} value={code} onChange={(e) => setCode(e.target.value)} />
           </div>
           <div>
-            <label className={label}>适用性别</label>
+            <label className={label}>{t.gender}</label>
             <select className={input} value={gender} onChange={(e) => setGender(e.target.value)}>
               <option value="">—</option>
-              <option value="men">男装</option>
-              <option value="women">女装</option>
-              <option value="unisex">通用</option>
+              <option value="men">{t.pGenderMen}</option>
+              <option value="women">{t.pGenderWomen}</option>
+              <option value="unisex">{t.pGenderUnisex}</option>
             </select>
           </div>
           <div>
-            <label className={label}>品牌</label>
+            <label className={label}>{t.brand}</label>
             <select className={input} value={brandId} onChange={(e) => setBrandId(e.target.value)}>
               <option value="">—</option>
               {brands.map((b) => (
@@ -650,7 +651,7 @@ function ProductForm({
             </select>
           </div>
           <div>
-            <label className={label}>分类 *</label>
+            <label className={label}>{t.category} *</label>
             <select
               className={input}
               value={categoryId}
@@ -666,7 +667,7 @@ function ProductForm({
             </select>
           </div>
           <div>
-            <label className={label}>价格（₩）*</label>
+            <label className={label}>{t.pPriceWon}</label>
             <input
               type="number"
               className={input}
@@ -676,7 +677,7 @@ function ProductForm({
             />
           </div>
           <div>
-            <label className={label}>划线价（₩）</label>
+            <label className={label}>{t.pComparePrice}</label>
             <input
               type="number"
               className={input}
@@ -685,11 +686,11 @@ function ProductForm({
             />
           </div>
           <div>
-            <label className={label}>状态</label>
+            <label className={label}>{t.status}</label>
             <select className={input} value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="draft">草稿</option>
-              <option value="active">在售</option>
-              <option value="archived">已归档</option>
+              <option value="draft">{t.draft}</option>
+              <option value="active">{t.active}</option>
+              <option value="archived">{t.archived}</option>
             </select>
           </div>
         </div>
@@ -697,9 +698,9 @@ function ProductForm({
         {/* ---------- 积分配置 ---------- */}
         <div className="border border-line p-4 space-y-4">
           <div>
-            <h3 className="font-display text-lg text-ink">积分设置</h3>
+            <h3 className="font-display text-lg text-ink">{t.pointSettings}</h3>
             <p className="text-[11px] text-muted mt-1">
-              控制这个商品「买完给不给积分」和「能不能用积分抵扣」。全局默认值在「积分设置」页。
+              {t.pPointsHint}
             </p>
           </div>
 
@@ -712,31 +713,31 @@ function ProductForm({
                 onChange={(e) => setEarnPoints(e.target.checked)}
                 className="w-4 h-4"
               />
-              <span className="text-sm text-ink">购买本商品可以获得积分</span>
+              <span className="text-sm text-ink">{t.pEarnToggle}</span>
             </label>
             {earnPoints && (
               <div className="grid grid-cols-2 gap-3 pl-6">
                 <div>
-                  <label className={label}>返积分方式</label>
+                  <label className={label}>{t.pEarnType}</label>
                   <select
                     className={input}
                     value={earnType}
                     onChange={(e) => setEarnType(e.target.value)}
                   >
-                    <option value="percent">按实付金额百分比</option>
-                    <option value="fixed">按件固定返</option>
+                    <option value="percent">{t.pEarnTypePercent}</option>
+                    <option value="fixed">{t.pEarnTypeFixed}</option>
                   </select>
                 </div>
                 <div>
                   <label className={label}>
-                    {earnType === 'fixed' ? '每件返多少积分' : '返积分比例（%）'}
+                    {earnType === 'fixed' ? t.pEarnFixedLabel : t.pEarnPercentLabel}
                   </label>
                   <input
                     type="number"
                     min={0}
                     className={input}
                     value={earnValue}
-                    placeholder={earnType === 'fixed' ? '如 500' : '留空 = 用全局比例'}
+                    placeholder={earnType === 'fixed' ? t.pEarnPhFixed : t.pEarnPhPercent}
                     onChange={(e) => setEarnValue(e.target.value)}
                   />
                 </div>
@@ -753,21 +754,21 @@ function ProductForm({
                 onChange={(e) => setUsePoints(e.target.checked)}
                 className="w-4 h-4"
               />
-              <span className="text-sm text-ink">本商品可以使用积分抵扣</span>
+              <span className="text-sm text-ink">{t.pUseToggle}</span>
             </label>
             {usePoints && (
               <div className="pl-6">
-                <label className={label}>本商品单笔最多可用积分数</label>
+                <label className={label}>{t.pMaxUseLabel}</label>
                 <input
                   type="number"
                   min={0}
                   className={input + ' max-w-[240px]'}
                   value={maxPointUse}
-                  placeholder="留空 = 不单独限制"
+                  placeholder={t.pMaxUsePh}
                   onChange={(e) => setMaxPointUse(e.target.value)}
                 />
                 <p className="text-[11px] text-muted mt-1">
-                  留空表示跟随全局上限（单笔最多抵订单金额的设定百分比）。
+                  {t.pMaxUseHint}
                 </p>
               </div>
             )}
@@ -777,14 +778,14 @@ function ProductForm({
         {/* ---------- 购买赠送优惠券 ---------- */}
         <div className="border border-line p-4 space-y-3">
           <div>
-            <h3 className="font-display text-lg text-ink">购买赠送优惠券</h3>
+            <h3 className="font-display text-lg text-ink">{t.pCouponTitle}</h3>
             <p className="text-[11px] text-muted mt-1">
-              勾选后，客户购买本商品且订单支付成功，这张券会自动发到客户账户的「我的优惠券」里，结算时可直接用。不勾 = 不赠送。
+              {t.pCouponHint}
             </p>
           </div>
           {coupons.length === 0 ? (
             <p className="text-xs text-muted">
-              还没有创建优惠券 —— 请先在「优惠券」页创建，再回到这里勾选。
+              {t.pCouponEmpty}
             </p>
           ) : (
             <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
@@ -806,8 +807,8 @@ function ProductForm({
                   <span className="text-sm text-ink font-medium">{c.code}</span>
                   <span className="text-xs text-muted">
                     {c.type === 'percent'
-                      ? `打折 ${c.value}%`
-                      : `立减 ₩${c.value.toLocaleString()}`}
+                      ? t.pCouponPercent.replace('{n}', String(c.value))
+                      : t.pCouponFixed.replace('{n}', c.value.toLocaleString())}
                   </span>
                 </label>
               ))}
@@ -817,7 +818,7 @@ function ProductForm({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={label}>商品描述（韩语）</label>
+            <label className={label}>{t.pDescKo}</label>
             <textarea
               className={input}
               rows={3}
@@ -826,7 +827,7 @@ function ProductForm({
             />
           </div>
           <div>
-            <label className={label}>商品描述（中文）</label>
+            <label className={label}>{t.pDescZh}</label>
             <textarea
               className={input}
               rows={3}
@@ -836,17 +837,17 @@ function ProductForm({
           </div>
         </div>
         <div>
-          <label className={label}>标签（英文逗号分隔，如 new, sale）</label>
+          <label className={label}>{t.pTags}</label>
           <input className={input} value={tags} onChange={(e) => setTags(e.target.value)} />
         </div>
         <div>
-          <label className={label}>商品图（每行一个 URL，也可点下面按钮上传）</label>
+          <label className={label}>{t.pImages}</label>
           <textarea
             className={input}
             rows={2}
             value={images}
             onChange={(e) => setImages(e.target.value)}
-            placeholder="https://... 或 /uploads/xxx.webp"
+            placeholder={t.pImagesPh}
           />
           <div className="mt-2 flex items-center gap-3">
             <input
@@ -860,11 +861,11 @@ function ProductForm({
                 e.target.value = '';
               }}
             />
-            {uploading && <span className="text-xs text-muted">上传中…</span>}
-            <span className="text-[10px] text-muted">可按住 Ctrl 多选，一次传多张</span>
+            {uploading && <span className="text-xs text-muted">{t.pUploading}</span>}
+            <span className="text-[10px] text-muted">{t.pUploadTip}</span>
           </div>
           <p className="text-[10px] text-muted mt-1">
-            建议尺寸 900×1200（3:4 竖图），第一张为主图；单张 ≤10MB，支持 jpg / png / webp
+            {t.pImageSpec}
           </p>
           {images.trim() && (
             <div className="mt-2 flex gap-2 flex-wrap">
@@ -889,10 +890,10 @@ function ProductForm({
         <div className="border border-line p-3">
           <div className="flex justify-between items-center mb-2">
             <label className={label + ' mb-0'}>
-              商品规格（可添加多个：如 颜色 / 尺码 / 材质）
+              {t.pSpecTitle}
             </label>
             <button type="button" onClick={addSpec} className="text-xs text-accent hover:underline">
-              + 添加规格
+              + {t.pAddSpec}
             </button>
           </div>
 
@@ -902,13 +903,13 @@ function ProductForm({
                 <div className="flex gap-2 items-center mb-2">
                   <input
                     className={input}
-                    placeholder="规格名（韩语，如 색상）"
+                    placeholder={t.pSpecNameKo}
                     value={sp.name}
                     onChange={(e) => updateSpec(i, { name: e.target.value })}
                   />
                   <input
                     className={input}
-                    placeholder="规格名（中文，如 颜色）"
+                    placeholder={t.pSpecNameZh}
                     value={sp.nameZh ?? ''}
                     onChange={(e) => updateSpec(i, { nameZh: e.target.value })}
                   />
@@ -917,7 +918,7 @@ function ProductForm({
                     onClick={() => removeSpec(i)}
                     className="text-red-600 text-xs px-2 whitespace-nowrap"
                   >
-                    删除规格
+                    {t.pDelSpec}
                   </button>
                 </div>
                 <div className="space-y-2 pl-2 border-l-2 border-line">
@@ -925,13 +926,13 @@ function ProductForm({
                     <div key={vi} className="flex gap-2 items-center">
                       <input
                         className={input}
-                        placeholder="规格值（韩语，如 레드）"
+                        placeholder={t.pSpecValKo}
                         value={v.ko}
                         onChange={(e) => updateSpecValue(i, vi, { ko: e.target.value })}
                       />
                       <input
                         className={input}
-                        placeholder="规格值（中文，如 红色）"
+                        placeholder={t.pSpecValZh}
                         value={v.zh ?? ''}
                         onChange={(e) => updateSpecValue(i, vi, { zh: e.target.value })}
                       />
@@ -939,7 +940,7 @@ function ProductForm({
                         type="button"
                         onClick={() => removeSpecValue(i, vi)}
                         className="text-muted hover:text-red-600 text-xs px-2"
-                        title="删除该规格值"
+                        title={t.pDelSpecVal}
                       >
                         ✕
                       </button>
@@ -950,14 +951,14 @@ function ProductForm({
                     onClick={() => addSpecValue(i)}
                     className="text-xs text-accent hover:underline"
                   >
-                    + 添加规格值
+                    + {t.pAddSpecVal}
                   </button>
                 </div>
               </div>
             ))}
             {specs.length === 0 && (
               <p className="text-xs text-muted">
-                还没有规格。点「+ 添加规格」可添加多个规格（颜色、尺码、材质…），每个规格可有多个值。
+                {t.pSpecEmpty}
               </p>
             )}
           </div>
@@ -967,7 +968,7 @@ function ProductForm({
         <div>
           <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
             <label className={label + ' mb-0'}>
-              规格组合 / 库存（SKU）— 可添加、修改、删除
+              {t.pSkuTitle}
             </label>
             <div className="flex gap-3">
               <button
@@ -975,14 +976,14 @@ function ProductForm({
                 onClick={generateSkuMatrix}
                 className="text-xs text-accent hover:underline"
               >
-                按规格一键生成组合
+                {t.pGenSku}
               </button>
               <button
                 type="button"
                 onClick={addSku}
                 className="text-xs text-accent hover:underline"
               >
-                + 手动添加一行
+                + {t.pAddSkuRow}
               </button>
             </div>
           </div>
@@ -996,8 +997,8 @@ function ProductForm({
                       {sp.nameZh || sp.name}
                     </span>
                   ))}
-                <span className="w-20">库存</span>
-                <span className="w-24">价格</span>
+                <span className="w-20">{t.pStockCol}</span>
+                <span className="w-24">{t.pPriceCol}</span>
                 <span className="w-10" />
               </div>
             )}
@@ -1012,7 +1013,7 @@ function ProductForm({
                       value={s.options[sp.name.trim()] ?? ''}
                       onChange={(e) => updateSkuOpt(i, sp.name.trim(), e.target.value)}
                     >
-                      <option value="">— 选择 —</option>
+                      <option value="">{t.pSelectPh}</option>
                       {sp.values
                         .filter((v) => v.ko.trim())
                         .map((v, vi) => (
@@ -1025,14 +1026,14 @@ function ProductForm({
                 <input
                   type="number"
                   className={input + ' w-20'}
-                  placeholder="库存"
+                  placeholder={t.pStockPh}
                   value={s.stock}
                   onChange={(e) => updateSkuNum(i, 'stock', e.target.value)}
                 />
                 <input
                   type="number"
                   className={input + ' w-24'}
-                  placeholder="留空用商品价"
+                  placeholder={t.pPricePh}
                   value={s.price}
                   onChange={(e) => updateSkuNum(i, 'price', e.target.value)}
                 />
@@ -1041,12 +1042,12 @@ function ProductForm({
                   onClick={() => removeSku(i)}
                   className="text-red-600 text-xs px-2 w-10"
                 >
-                  删除
+                  {t.delete}
                 </button>
               </div>
             ))}
             {skus.length === 0 && (
-              <p className="text-xs text-muted">还没有组合 — 不填的话商品按统一价格与无限库存售卖。</p>
+              <p className="text-xs text-muted">{t.pSkuEmpty}</p>
             )}
           </div>
         </div>
@@ -1054,10 +1055,10 @@ function ProductForm({
         {err && <p className="text-sm text-red-600">{err}</p>}
         <div className="flex gap-3 pt-2">
           <button type="submit" disabled={saving} className="btn-gold">
-            {saving ? '保存中…' : t.save}
+            {saving ? t.saving : t.save}
           </button>
           <button type="button" onClick={onClose} className="btn-outline">
-            取消
+            {t.cancel}
           </button>
         </div>
       </form>

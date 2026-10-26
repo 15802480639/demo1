@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { useAuth } from '@/components/auth/auth-provider';
-import { getDictionary } from '@/i18n/dictionaries';
+import type { Locale } from '@/i18n/config';
 import type { AdminDict } from '@/i18n/dictionaries';
 
 export function AdminShell({
@@ -14,9 +14,8 @@ export function AdminShell({
   user: { email: string | null; name: string | null; username?: string | null };
   children: React.ReactNode;
 }) {
-  const { locale } = useLocale();
-  // 后台界面固定中文（2026-10-10 子建要求：后台显示的英文全部改成中文）
-  const t = getDictionary('zh').admin;
+  const { locale, dict } = useLocale();
+  const t = dict.admin;
   const { logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -27,10 +26,10 @@ export function AdminShell({
     { href: '/admin/brands', label: t.brands },
     { href: '/admin/products', label: t.products },
     { href: '/admin/orders', label: t.orders },
-    { href: '/admin/consultations', label: 'Kakao 咨询' },
+    { href: '/admin/consultations', label: t.navConsultations },
     { href: '/admin/coupons', label: t.coupons },
-    { href: '/admin/points', label: '积分设置' },
-    { href: '/admin/newsletter', label: '订阅列表' },
+    { href: '/admin/points', label: t.pointSettings },
+    { href: '/admin/newsletter', label: t.navNewsletter },
     { href: '/admin/customers', label: t.customers },
     { href: '/admin/banners', label: t.banners },
     { href: '/admin/content', label: t.siteContent },
@@ -41,6 +40,15 @@ export function AdminShell({
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === `/${locale}${href}` : pathname.startsWith(`/${locale}${href}`);
+
+  // 后台语言切换（한국어 / 中文）：替换 URL 首段 locale，整站语言跟随
+  function switchLocale(next: Locale) {
+    const segments = pathname.split('/');
+    segments[1] = next;
+    const newPath = segments.join('/') || `/${next}`;
+    const qs = typeof window !== 'undefined' && window.location.search ? window.location.search : '';
+    router.push(qs ? `${newPath}${qs}` : newPath);
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-64px)]">
@@ -101,8 +109,28 @@ export function AdminShell({
           </div>
           <div className="flex-1" />
           <span className="text-sm text-ink-soft mr-4 hidden sm:inline">
-            {user.name || user.username || user.email || '管理员'}
+            {user.name || user.username || user.email || t.amDefaultUser}
           </span>
+          <div className="flex items-center border border-line mr-2">
+            <button
+              onClick={() => switchLocale('ko')}
+              aria-current={locale === 'ko'}
+              className={`px-2.5 py-1.5 text-xs transition-colors ${
+                locale === 'ko' ? 'bg-ink text-bg' : 'text-muted hover:text-ink'
+              }`}
+            >
+              한국어
+            </button>
+            <button
+              onClick={() => switchLocale('zh')}
+              aria-current={locale === 'zh'}
+              className={`px-2.5 py-1.5 text-xs transition-colors ${
+                locale === 'zh' ? 'bg-ink text-bg' : 'text-muted hover:text-ink'
+              }`}
+            >
+              中文
+            </button>
+          </div>
           <button
             onClick={() => logout().then(() => router.push(`/${locale}/admin/login`))}
             className="text-xs tracking-wide px-3 py-1.5 border border-line hover:border-ink transition-colors"

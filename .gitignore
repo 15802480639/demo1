@@ -66,3 +66,9 @@ qa-shots/
 .next_old_*/
 preview-mail-*.html
 _review-shots/
+
+# 部署产物（本地构建的传输包，不进仓库）
+webshopp-*.tar.gz
+
+# playwright-cli 会话快照（工具噪音）
+.playwright-cli/

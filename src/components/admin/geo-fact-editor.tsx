@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 import type { Locale } from '@/i18n/config';
 
 type Fact = {
@@ -17,19 +16,11 @@ type Fact = {
 
 const EMPTY = { label: '', value: '', locale: '', kind: 'fact', order: 0, status: 'published' };
 
-const KIND_LABEL: Record<string, string> = {
-  fact: '基本事实',
-  claim: '品牌主张',
-  differentiator: '差异化卖点',
-  audience: '目标人群',
-  shipping: '配送政策',
-  payment: '支付方式',
-  contact: '联系方式',
-};
+const KIND_KEYS = ['fact', 'claim', 'differentiator', 'audience', 'shipping', 'payment', 'contact'] as const;
 
 export default function GeoFactEditor({ loc }: { loc: Locale }) {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
 
   const [facts, setFacts] = useState<Fact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +32,20 @@ export default function GeoFactEditor({ loc }: { loc: Locale }) {
   const input =
     'w-full border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent';
   const label = 'text-xs tracking-widest text-muted block mb-1';
+  const kindLabel = (k: string) =>
+    k === 'claim'
+      ? t.gkKindClaim
+      : k === 'differentiator'
+        ? t.gkKindDifferentiator
+        : k === 'audience'
+          ? t.gkKindAudience
+          : k === 'shipping'
+            ? t.gkKindShipping
+            : k === 'payment'
+              ? t.gkKindPayment
+              : k === 'contact'
+                ? t.gkKindContact
+                : t.gkKindFact;
 
   async function load() {
     setLoading(true);
@@ -116,7 +121,7 @@ export default function GeoFactEditor({ loc }: { loc: Locale }) {
               className={input}
               value={form.label}
               onChange={(e) => setForm({ ...form, label: e.target.value })}
-              placeholder="配送地"
+              placeholder={t.gkShipTo}
             />
           </div>
           <div>
@@ -126,9 +131,9 @@ export default function GeoFactEditor({ loc }: { loc: Locale }) {
               value={form.kind}
               onChange={(e) => setForm({ ...form, kind: e.target.value })}
             >
-              {Object.entries(KIND_LABEL).map(([k, v]) => (
+              {KIND_KEYS.map((k) => (
                 <option key={k} value={k}>
-                  {v}
+                  {kindLabel(k)}
                 </option>
               ))}
             </select>
@@ -139,7 +144,7 @@ export default function GeoFactEditor({ loc }: { loc: Locale }) {
               className={`${input} min-h-[70px]`}
               value={form.value}
               onChange={(e) => setForm({ ...form, value: e.target.value })}
-              placeholder="从韩国发货"
+              placeholder={t.gkShipFrom}
             />
           </div>
           <div>
@@ -150,9 +155,9 @@ export default function GeoFactEditor({ loc }: { loc: Locale }) {
               onChange={(e) => setForm({ ...form, locale: e.target.value })}
             >
               <option value="">{t.allLocales}</option>
-              <option value="ko">한국어</option>
-              <option value="zh">中文</option>
-              <option value="en">English</option>
+              <option value="ko">{t.langNameKo}</option>
+              <option value="zh">{t.langNameZh}</option>
+              <option value="en">{t.langNameEn}</option>
             </select>
           </div>
           <div className="flex items-end gap-4">
@@ -194,15 +199,11 @@ export default function GeoFactEditor({ loc }: { loc: Locale }) {
 
       <div className="max-w-3xl mt-6">
         {loading ? (
-          <p className="text-sm text-muted">加载中…</p>
+          <p className="text-sm text-muted">{t.gkLoading}</p>
         ) : facts.length === 0 ? (
           <div className="border border-line bg-surface p-5">
             <p className="text-sm text-muted">{t.geoNoFacts}</p>
-            <p className="text-xs text-muted mt-2 leading-relaxed">
-              建议至少录入：Founded / Business type / Product categories / Shipping
-              origin / Payment / Returns policy。这些会被 llms.txt 与 Organization
-              结构化数据反复引用。
-            </p>
+            <p className="text-xs text-muted mt-2 leading-relaxed">{t.gkAdvice}</p>
           </div>
         ) : (
           <div className="border border-line divide-y divide-line">
@@ -230,7 +231,7 @@ export default function GeoFactEditor({ loc }: { loc: Locale }) {
                 </div>
                 <div className="flex gap-2 pt-1 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 border border-line text-muted">
-                    {KIND_LABEL[f.kind] ?? f.kind}
+                    {kindLabel(f.kind)}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 border border-line text-muted">
                     {f.locale ? f.locale.toUpperCase() : t.allLocales}

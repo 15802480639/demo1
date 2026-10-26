@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 import { formatPrice } from '@/lib/format';
 
 type Coupon = {
@@ -32,8 +31,8 @@ function parseIds(s: string | null | undefined): string[] {
 }
 
 export default function AdminCouponsPage() {
-  const { locale } = useLocale();
-  const t = getDictionary('zh').admin;
+  const { locale, dict } = useLocale();
+  const t = dict.admin;
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [products, setProducts] = useState<ProductOpt[]>([]);
   const [productKw, setProductKw] = useState('');
@@ -136,7 +135,7 @@ export default function AdminCouponsPage() {
       </div>
 
       {loading ? (
-        <p className="text-muted">加载中…</p>
+        <p className="text-muted">{t.cpLoading}</p>
       ) : (
         <div className="border border-line divide-y divide-line">
           {coupons.map((c) => (
@@ -149,7 +148,9 @@ export default function AdminCouponsPage() {
                 min {c.minSpend ? formatPrice(c.minSpend, locale) : '—'}
               </span>
               <span className="text-xs text-muted w-28">
-                {parseIds(c.productIds).length > 0 ? `限 ${parseIds(c.productIds).length} 件商品` : '全场通用'}
+                {parseIds(c.productIds).length > 0
+                  ? t.cpLimitN.replace('{n}', String(parseIds(c.productIds).length))
+                  : t.cpAllProducts}
               </span>
               <span className="text-xs text-muted w-20">
                 {c.usedCount}/{c.usageLimit ?? '∞'}
@@ -210,19 +211,18 @@ export default function AdminCouponsPage() {
             <label className="text-xs tracking-widest text-muted block mb-1">{t.usageLimit}</label>
             <input type="number" className={input} value={form.usageLimit} onChange={(e) => setForm({ ...form, usageLimit: e.target.value })} />
           </div>
-          {/* 适用商品：不勾选 = 全场通用 */}
           <div className="col-span-2">
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs tracking-widest text-muted">适用商品（不勾选 = 全场通用）</label>
+              <label className="text-xs tracking-widest text-muted">{t.cpApplyProducts}</label>
               <span className="text-xs text-muted">
-                已选 {form.productIds.length} 件
+                {t.cpSelected.replace('{n}', String(form.productIds.length))}
                 {form.productIds.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, productIds: [] }))}
                     className="ml-2 text-accent hover:underline"
                   >
-                    清空
+                    {t.cpClear}
                   </button>
                 )}
               </span>
@@ -231,7 +231,7 @@ export default function AdminCouponsPage() {
               className={input + ' mb-2'}
               value={productKw}
               onChange={(e) => setProductKw(e.target.value)}
-              placeholder="搜索商品名 / 货号"
+              placeholder={t.cpSearchPh}
             />
             <div className="border border-line max-h-52 overflow-y-auto">
               {products
@@ -262,7 +262,7 @@ export default function AdminCouponsPage() {
                     {p.code && <span className="text-xs text-muted shrink-0">{p.code}</span>}
                   </label>
                 ))}
-              {products.length === 0 && <p className="px-3 py-2 text-xs text-muted">商品加载中…</p>}
+              {products.length === 0 && <p className="px-3 py-2 text-xs text-muted">{t.cpProductsLoading}</p>}
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm">

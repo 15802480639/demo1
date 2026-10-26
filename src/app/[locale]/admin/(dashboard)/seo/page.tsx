@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 
 /**
  * SEO 设置页。
@@ -80,8 +79,8 @@ function merged(s: Record<string, string>): Record<string, string> {
 }
 
 export default function AdminSeoPage() {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -132,7 +131,9 @@ export default function AdminSeoPage() {
       const d = await res.json();
       setPushMsg(
         d.ok
-          ? `✓ ${d.submitted}/${d.totalCollected ?? d.submitted} 已提交`
+          ? t.spSubmitted
+              .replace('{a}', String(d.submitted))
+              .replace('{b}', String(d.totalCollected ?? d.submitted))
           : `⚠ ${d.error ?? `HTTP ${d.status ?? '?'}`}`
       );
     } catch (e) {
@@ -165,7 +166,7 @@ export default function AdminSeoPage() {
       <div className="space-y-6 mt-6">
         <Section
           title={t.geoFactTitle}
-          hint="保存即生效，无需重新 build。留空则回落系统默认。"
+          hint={t.spSaveHint}
         >
           <div>
             <label className={label}>{t.metaTitle}</label>
@@ -199,7 +200,7 @@ export default function AdminSeoPage() {
               className={input}
               value={form.og_image ?? ''}
               onChange={(e) => set('og_image', e.target.value)}
-              placeholder="https://…（建议 1200×630）"
+              placeholder={t.spOgImagePh}
             />
           </div>
           <div>
@@ -214,8 +215,8 @@ export default function AdminSeoPage() {
         </Section>
 
         <Section
-          title="Search Console 验证"
-          hint="保存后立刻输出到所有页面的 head。⚠️ GSC 必须选「HTML 标记」验证方式，本站有动态路由不适合「HTML 文件」方式。"
+          title={t.spGscTitle}
+          hint={t.spGscHint}
         >
           {VERIFY_KEYS.map((k) => (
             <div key={k}>
@@ -237,10 +238,10 @@ export default function AdminSeoPage() {
 
         <Section
           title={t.companyInfo}
-          hint="⚠️ 强烈建议填满：公司法定名称与地址是 AI 做品牌实体消歧的硬证据。留'—'或占位符时前台会自动剔除，绝不会输出脏数据污染实体。"
+          hint={t.spCompanyHint}
         >
           <div>
-            <label className={label}>公司法定名称</label>
+            <label className={label}>{t.spCompanyName}</label>
             <input
               className={input}
               value={form.company_legal_name ?? ''}
@@ -249,7 +250,7 @@ export default function AdminSeoPage() {
             />
           </div>
           <div>
-            <label className={label}>CEO / 代表</label>
+            <label className={label}>{t.spCeo}</label>
             <input
               className={input}
               value={form.company_ceo ?? ''}
@@ -257,7 +258,7 @@ export default function AdminSeoPage() {
             />
           </div>
           <div>
-            <label className={label}>公司地址</label>
+            <label className={label}>{t.spAddress}</label>
             <input
               className={input}
               value={form.company_address ?? ''}
@@ -267,7 +268,7 @@ export default function AdminSeoPage() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className={label}>联系邮箱</label>
+              <label className={label}>{t.spEmail}</label>
               <input
                 className={input}
                 value={form.company_email ?? ''}
@@ -276,7 +277,7 @@ export default function AdminSeoPage() {
               />
             </div>
             <div>
-              <label className={label}>联系电话</label>
+              <label className={label}>{t.spPhone}</label>
               <input
                 className={input}
                 value={form.company_tel ?? ''}
@@ -286,7 +287,7 @@ export default function AdminSeoPage() {
             </div>
           </div>
           <div>
-            <label className={label}>营业执照 / 法人登记号</label>
+            <label className={label}>{t.spBizNo}</label>
             <input
               className={input}
               value={form.company_business_no ?? ''}
@@ -296,11 +297,11 @@ export default function AdminSeoPage() {
         </Section>
 
         <Section
-          title="Kakao 咨询链接（购买通道）"
-          hint="客户在 Kakao 平台创建频道后，把聊天页地址粘到这里，形如 https://pf.kakao.com/_AbCdEf/chat 。填了之后韩语商品页的主按钮会从「加入购物车」变成「Kakao 상담」，点它会先在本站留一条咨询记录（商品名/规格/价格/语言），再跳转 Kakao。留空 = 保持原购物车按钮不变。"
+          title={t.spKakaoTitle}
+          hint={t.spKakaoHint}
         >
           <div>
-            <label className={label}>Kakao 频道聊天链接</label>
+            <label className={label}>{t.spKakaoLabel}</label>
             <input
               className={input}
               value={form.kakao_consult_url ?? ''}
@@ -308,17 +309,17 @@ export default function AdminSeoPage() {
               placeholder="https://pf.kakao.com/_AbCdEf/chat"
             />
             <p className="mt-1 text-xs text-muted">
-              当前状态：
+              {t.spKakaoStatus}
               {/^https?:\/\//i.test((form.kakao_consult_url ?? '').trim())
-                ? '已启用 —— 韩语商品页主按钮为「Kakao 상담」'
-                : '未配置 —— 保持「加入购物车 / 立即购买」'}
+                ? t.spKakaoOn
+                : t.spKakaoOff}
             </p>
           </div>
         </Section>
 
         <Section
           title={t.socialLinks}
-          hint="官方账号链接，会输出为 Organization JSON-LD 的 sameAs 字段 —— 这是把品牌与第三方账号绑定的唯一硬证据。⚠️ 只填 http(s) 开头的真实地址，填 '#' 会被自动剔除。至少填 2 个。"
+          hint={t.spSameAsHint}
         >
           <div className="grid gap-4 sm:grid-cols-2">
             {SOCIAL_KEYS.map((k) => (
@@ -336,8 +337,8 @@ export default function AdminSeoPage() {
         </Section>
 
         <Section
-          title="IndexNow（即时收录）"
-          hint="ChatGPT 联网检索主要走 Bing 索引，IndexNow 推送后 Bing 系几分钟内重抓。填 8~128 位字母/数字/连字符作为密钥，另需把同内容文件放到 public/{key}.txt 保证公网可读。"
+          title={t.spIndexNowTitle}
+          hint={t.spIndexNowHint}
         >
           <div>
             <label className={label}>{t.indexnowKey}</label>

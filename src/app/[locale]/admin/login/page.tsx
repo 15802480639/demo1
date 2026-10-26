@@ -5,9 +5,15 @@ import { getDictionary } from '@/i18n/dictionaries';
 import { getSession } from '@/lib/auth';
 import { LoginForm } from '@/components/auth/login-form';
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const loc = (isLocale(locale) ? locale : 'ko') as Locale;
   return {
-    title: getDictionary('zh').admin.loginTitle,
+    title: getDictionary(loc).admin.loginTitle,
     robots: { index: false, follow: false },
   };
 }
@@ -19,7 +25,7 @@ export default async function AdminLoginPage({
 }) {
   const { locale } = await params;
   const loc = (isLocale(locale) ? locale : 'ko') as Locale;
-  const dict = getDictionary('zh'); // 后台固定中文
+  const dict = getDictionary(loc);
   const session = await getSession();
   if (session?.role === 'admin') redirect(`/${loc}/admin`);
 

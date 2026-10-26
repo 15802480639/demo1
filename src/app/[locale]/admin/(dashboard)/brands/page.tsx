@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { getDictionary } from '@/i18n/dictionaries';
 
 type Brand = {
   id: string;
@@ -13,8 +12,8 @@ type Brand = {
 };
 
 export default function AdminBrandsPage() {
-  useLocale(); // 后台固定中文
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const [list, setList] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Brand | null>(null);
@@ -37,7 +36,7 @@ export default function AdminBrandsPage() {
     const res = await fetch(`/api/admin/brands/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const d = await res.json().catch(() => null);
-      alert(d?.message ?? '删除失败');
+      alert(d?.message ?? t.brErrDelete);
       return;
     }
     load();
@@ -47,10 +46,8 @@ export default function AdminBrandsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="font-display text-3xl text-ink">品牌管理</h1>
-          <p className="text-xs text-muted mt-1">
-            品牌名称支持韩语 + 中文双语；商品在「商品管理」里选择所属品牌。
-          </p>
+          <h1 className="font-display text-3xl text-ink">{t.brands}</h1>
+          <p className="text-xs text-muted mt-1">{t.brIntro}</p>
         </div>
         <button
           onClick={() => {
@@ -60,12 +57,12 @@ export default function AdminBrandsPage() {
           }}
           className="btn-gold"
         >
-          + 新建品牌
+          + {t.brNewTitle}
         </button>
       </div>
 
       {loading ? (
-        <p className="text-muted">加载中…</p>
+        <p className="text-muted">{t.cLoading}</p>
       ) : (
         <div className="border border-line divide-y divide-line">
           {list.map((b) => (
@@ -76,7 +73,9 @@ export default function AdminBrandsPage() {
                   {b.nameZh && <span className="text-muted"> / {b.nameZh}</span>}
                 </p>
                 <p className="text-xs text-muted">
-                  /{b.slug} · {b._count?.products ?? 0} 个商品
+                  {t.brMeta
+                    .replace('{slug}', b.slug)
+                    .replace('{n}', String(b._count?.products ?? 0))}
                 </p>
               </div>
               <button
@@ -87,18 +86,18 @@ export default function AdminBrandsPage() {
                 }}
                 className="text-xs px-3 py-1.5 border border-line hover:border-ink"
               >
-                编辑
+                {t.edit}
               </button>
               <button
                 onClick={() => remove(b.id)}
                 className="text-xs px-3 py-1.5 border border-line hover:border-red-500 text-red-600"
               >
-                删除
+                {t.delete}
               </button>
             </div>
           ))}
           {list.length === 0 && (
-            <p className="p-5 text-sm text-muted">暂无品牌，点右上角「新建品牌」创建。</p>
+            <p className="p-5 text-sm text-muted">{t.brEmpty}</p>
           )}
         </div>
       )}
@@ -127,7 +126,8 @@ function BrandForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const t = getDictionary('zh').admin;
+  const { dict } = useLocale();
+  const t = dict.admin;
   const [name, setName] = useState(editing?.name ?? '');
   const [nameZh, setNameZh] = useState(editing?.nameZh ?? '');
   const [slug, setSlug] = useState(editing?.slug ?? '');
@@ -138,7 +138,7 @@ function BrandForm({
     e.preventDefault();
     setErr('');
     if (!name.trim()) {
-      setErr('请填写品牌名称（韩语）');
+      setErr(t.brErrName);
       return;
     }
     setSaving(true);
@@ -178,7 +178,7 @@ function BrandForm({
       >
         <div className="flex justify-between items-center">
           <h2 className="font-display text-2xl text-ink">
-            {editing ? '编辑品牌' : '新建品牌'}
+            {editing ? t.brEditTitle : t.brNewTitle}
           </h2>
           <button type="button" onClick={onClose} className="text-muted hover:text-ink">
             ✕
@@ -187,16 +187,16 @@ function BrandForm({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={label}>名称（韩语）*</label>
+            <label className={label}>{t.brNameKo}</label>
             <input className={input} value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div>
-            <label className={label}>名称（中文）</label>
+            <label className={label}>{t.brNameZh}</label>
             <input className={input} value={nameZh} onChange={(e) => setNameZh(e.target.value)} />
           </div>
           {!editing && (
             <div>
-              <label className={label}>URL slug（留空自动生成）</label>
+              <label className={label}>{t.brSlug}</label>
               <input className={input} value={slug} onChange={(e) => setSlug(e.target.value)} />
             </div>
           )}
@@ -205,10 +205,10 @@ function BrandForm({
         {err && <p className="text-sm text-red-600">{err}</p>}
         <div className="flex gap-3 pt-2">
           <button type="submit" disabled={saving} className="btn-gold">
-            {saving ? '保存中…' : t.save}
+            {saving ? t.saving : t.save}
           </button>
           <button type="button" onClick={onClose} className="btn-outline">
-            取消
+            {t.cancel}
           </button>
         </div>
       </form>

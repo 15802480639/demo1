@@ -14,18 +14,22 @@ export function statusLabel(status: string, locale: Locale): string {
   return LABELS[status]?.[locale] ?? status;
 }
 
-/** 商品状态：后台固定显示中文 */
-const PRODUCT_LABELS: Record<string, string> = {
-  draft: '草稿',
-  active: '在售',
-  archived: '已归档',
+/** 商品状态：跟随界面语言 */
+const PRODUCT_LABELS: Record<string, { ko: string; zh: string; en: string }> = {
+  draft: { ko: '초안', zh: '草稿', en: 'Draft' },
+  active: { ko: '판매중', zh: '在售', en: 'Active' },
+  archived: { ko: '보관됨', zh: '已归档', en: 'Archived' },
 };
 
-export function productStatusLabel(status: string): string {
-  return PRODUCT_LABELS[status] ?? status;
+export function productStatusLabel(status: string, locale: Locale): string {
+  return PRODUCT_LABELS[status]?.[locale] ?? status;
 }
 
-/** Banner 上下架状态：后台固定显示中文 */
-export function bannerStatusLabel(status: string): string {
-  return status === 'published' ? '已上架' : status === 'draft' ? '草稿' : status;
+/** Banner 上下架状态：跟随界面语言 */
+export function bannerStatusLabel(status: string, locale: Locale): string {
+  const map: Record<string, { ko: string; zh: string; en: string }> = {
+    published: { ko: '게시됨', zh: '已上架', en: 'Published' },
+    draft: { ko: '초안', zh: '草稿', en: 'Draft' },
+  };
+  return map[status]?.[locale] ?? status;
 }

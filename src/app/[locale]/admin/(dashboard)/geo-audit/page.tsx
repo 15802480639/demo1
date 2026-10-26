@@ -7,7 +7,13 @@ import GeoHealthCheck from '@/components/admin/geo-health-check';
  */
 export const dynamic = 'force-dynamic';
 
-export default async function AdminGeoAuditPage() {
-  const audit = await runGeoAudit();
+export default async function AdminGeoAuditPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  // 体检报告文案按当前界面语言产出（三语对象在引擎内拍平）
+  const audit = await runGeoAudit((locale === 'ko' || locale === 'zh' || locale === 'en' ? locale : 'zh'));
   return <GeoHealthCheck audit={audit} />;
 }
