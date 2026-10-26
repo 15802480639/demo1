@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCategoryTree } from '@/lib/category-tree';
+import { getKakaoUrl } from '@/lib/kakao';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic';
  * 后台编辑区与 API 输出同步清理；存量 SiteSetting 数据保留不删。
  */
 export async function GET() {
-  const [tree, settings] = await Promise.all([
+  const [tree, settings, kakaoUrl] = await Promise.all([
     getCategoryTree(),
     prisma.siteSetting.findMany({
       where: {
@@ -25,6 +26,7 @@ export async function GET() {
         },
       },
     }),
+    getKakaoUrl(),
   ]);
   // 导航用扁平列表 + 层级标记（前端渲染下钻菜单更方便）
   const flat: {
@@ -68,5 +70,5 @@ export async function GET() {
       homeSeo[s.key] = s.value;
     }
   }
-  return NextResponse.json({ categories: flat, footer, homeSeo });
+  return NextResponse.json({ categories: flat, footer, homeSeo, kakaoUrl });
 }

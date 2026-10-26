@@ -76,6 +76,8 @@ export type Dict = {
     kakaoConsult: string;
     /** 中文/英文页的次要入口：跳 Kakao 咨询 */
     kakaoConsultAlt: string;
+    /** 结算页付款入口：跳转到 KakaoTalk 完成支付/咨询 */
+    payViaKakao: string;
     viewDetail: string;
     loadMore: string;
     new: string;
@@ -920,6 +922,7 @@ const ko: Dict = {
   common: {
     addToCart: '장바구니 담기',
     buyNow: '바로구매',
+    payViaKakao: '카카오톡으로 결제하기',
     kakaoConsult: 'Kakao 상담',
     kakaoConsultAlt: 'Kakao 상담하기',
     viewDetail: '자세히 보기',
@@ -1755,6 +1758,7 @@ const zh: Dict = {
   common: {
     addToCart: '加入购物车',
     buyNow: '立即购买',
+    payViaKakao: '通过 KakaoTalk 支付',
     kakaoConsult: 'Kakao 咨询',
     kakaoConsultAlt: 'Kakao 咨询购买',
     viewDetail: '查看详情',
@@ -2591,6 +2595,7 @@ const en: Dict = {
   common: {
     addToCart: 'Add to Cart',
     buyNow: 'Buy Now',
+    payViaKakao: 'Pay via KakaoTalk',
     kakaoConsult: 'Chat on Kakao',
     kakaoConsultAlt: 'Buy via Kakao',
     viewDetail: 'View Detail',

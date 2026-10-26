@@ -179,6 +179,15 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  // 后台「SEO 设置 → Kakao 咨询链接」：有配置则结算页付款入口跳转到 KakaoTalk
+  const [kakaoUrl, setKakaoUrl] = useState('');
+  useEffect(() => {
+    fetch('/api/site-content')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setKakaoUrl(d?.kakaoUrl || ''))
+      .catch(() => {});
+  }, []);
+
   const total = cartTotal(lines);
   // 积分抵扣金额：向下取整由服务端再校验一次，这里只做显示
   const pointsDiscount =
@@ -572,13 +581,22 @@ export default function CheckoutPage() {
                     : `약 ${Math.floor((grand * quote.rule.earnPercent) / 100).toLocaleString()}P 적립 예정`}
               </p>
             )}
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-gold w-full mt-6"
-            >
-              {loading ? '…' : dict.common.buyNow}
-            </button>
+            {/* 付款入口：后台已配置 Kakao 咨询链接 → 跳转到 KakaoTalk 完成支付/咨询；
+                未配置时回落到原下单流程 */}
+            {kakaoUrl ? (
+              <a
+                href={kakaoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-gold w-full mt-6 flex items-center justify-center gap-2"
+              >
+                {dict.common.payViaKakao}
+              </a>
+            ) : (
+              <button type="submit" disabled={loading} className="btn-gold w-full mt-6">
+                {loading ? '…' : dict.common.buyNow}
+              </button>
+            )}
           </div>
         </form>
       )}
