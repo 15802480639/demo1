@@ -29,6 +29,8 @@ export function SiteHeader() {
   const [langOpen, setLangOpen] = useState(false);
   // 移动端菜单：当前展开的一级分类 href（null = 都收起）
   const [openCat, setOpenCat] = useState<string | null>(null);
+  // 桌面端：点击一级分类展开/收起下拉面板（有子分类时点击不跳转）
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [navCategories, setNavCategories] = useState<NavCategory[]>([]);
   const count = cartCount(lines);
 
@@ -48,6 +50,21 @@ export function SiteHeader() {
 
   // 分类导航：一级分类进 nav，二级/三级分类全部收进其下拉面板
   const topCategories = navCategories.filter((c) => c.depth === 1);
+
+  // 路由变化 / 点击导航以外区域时，收起桌面下拉面板
+  useEffect(() => {
+    setOpenMenu(null);
+  }, [pathname]);
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t || !t.closest('[data-cat-menu]')) setOpenMenu(null);
+    };
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, [openMenu]);
+
   // ⚠️ 只按 parentId 过滤、不写死 depth：数据层 depth 由树计算，
   // 万一某级断档，写死 depth 会静默丢子分类
   const subsOf = (parentId: string) =>
@@ -123,43 +140,74 @@ export function SiteHeader() {
           />
         </Link>
 
-        {/* center: nav (desktop) */}
-        <nav className="hidden lg:flex flex-1 min-w-0 items-center justify-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* center: nav (desktop) —— ⚠️ 禁止加 overflow-x-auto：会裁剪下拉面板 */}
+        <nav className="hidden lg:flex flex-1 min-w-0 items-center justify-center">
           <div className="flex items-center gap-5 whitespace-nowrap px-2">
           {nav.map((item) => {
             const isActive = pathname === item.href.split('?')[0];
             const children = 'children' in item ? item.children : undefined;
+            const hasChildren = !!children && children.length > 0;
+            const isOpen = openMenu === item.href;
             return (
               <div
                 key={item.label}
-                className={`relative group text-sm tracking-wide transition-colors ${
+                data-cat-menu
+                className={`relative text-sm tracking-wide transition-colors ${
                   isActive ? 'text-ink' : 'text-ink-soft hover:text-ink'
                 }`}
               >
                 <Link
                   href={item.href}
                   aria-current={isActive ? 'page' : undefined}
+                  aria-expanded={hasChildren ? isOpen : undefined}
                   className="block"
+                  onClick={
+                    hasChildren
+                      ? (e) => {
+                          // 有下级分类：点击 = 展开/收起下拉，不跳转
+                          e.preventDefault();
+                          setOpenMenu((v) => (v === item.href ? null : item.href));
+                        }
+                      : undefined
+                  }
                 >
                   {item.label}
+                  {hasChildren && (
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 10 10"
+                      fill="none"
+                      className={`inline-block ml-1 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                      aria-hidden
+                    >
+                      <path d="M1 3l4 4 4-4" stroke="currentColor" strokeWidth="1.2" />
+                    </svg>
+                  )}
                   <span
                     className={`absolute -bottom-1 left-0 h-px bg-accent transition-all duration-300 ${
-                      isActive ? 'w-full' : 'w-0 group-hover:w-full'
+                      isActive ? 'w-full' : 'w-0 hover:w-full'
                     }`}
                   />
                 </Link>
-                {/* 二级/三级分类下拉：hover 展开，三级缩进列在二级下方 */}
-                {children && children.length > 0 && (
-                  <div
-                    className="absolute left-0 top-full hidden group-hover:block pt-3"
-                    role="menu"
-                  >
+                {/* 二级/三级分类下拉：点击展开，三级缩进列在二级下方；面板顶部可进入该分类页 */}
+                {hasChildren && isOpen && (
+                  <div className="absolute left-0 top-full z-50 pt-2" role="menu">
                     <div className="bg-surface border border-line shadow-card py-2 min-w-[220px] max-h-[70vh] overflow-y-auto">
-                      {children.map((c) => (
+                      <Link
+                        href={item.href}
+                        role="menuitem"
+                        onClick={() => setOpenMenu(null)}
+                        className="block px-4 py-2 text-xs text-accent border-b border-line mb-1 whitespace-nowrap"
+                      >
+                        {dict.nav.shop} · {item.label}
+                      </Link>
+                      {children!.map((c) => (
                         <div key={c.href}>
                           <Link
                             href={c.href}
                             role="menuitem"
+                            onClick={() => setOpenMenu(null)}
                             className="block px-4 py-2 text-sm text-ink hover:text-accent hover:bg-surface-2 transition-colors whitespace-nowrap"
                           >
                             {c.label}
@@ -171,6 +219,7 @@ export function SiteHeader() {
                                   key={t.href}
                                   href={t.href}
                                   role="menuitem"
+                                  onClick={() => setOpenMenu(null)}
                                   className="block px-4 py-1.5 text-xs text-muted hover:text-accent transition-colors whitespace-nowrap"
                                 >
                                   {t.label}
