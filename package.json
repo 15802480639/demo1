@@ -10,7 +10,8 @@
     "db": "node scripts/db.cjs",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
-    "seed": "prisma db seed"
+    "seed": "prisma db seed",
+    "chat:ws": "node server/ws-server.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -29,6 +30,7 @@
     "proxy-agent": "^5.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "ws": "^8.22.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

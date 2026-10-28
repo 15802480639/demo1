@@ -16,6 +16,7 @@ import { getSession } from '@/lib/auth';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SiteFooter } from '@/components/layout/site-footer';
 import { KakaoChat } from '@/components/layout/kakao-chat';
+import { ChatWidget } from '@/components/chat/chat-widget';
 import { SiteChrome } from '@/components/layout/site-chrome';
 import {
   clampTitle,
@@ -182,6 +183,8 @@ export default async function LocaleLayout({
             <main id="main" className="min-h-screen">{children}</main>
             {/* KakaoTalk 聊天客服悬浮入口：后台配置了咨询链接才显示 */}
             <KakaoChat locale={loc} />
+            {/* 站内实时客服（IM）：游客可发起对话，后台 /{locale}/admin/chat 实时接待 */}
+            <ChatWidget />
             <SiteChrome>
               <SiteFooter />
             </SiteChrome>

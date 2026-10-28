@@ -29,6 +29,7 @@ model User {
   wishlist      Wishlist[]
   cart          Cart?
   consultations Consultation[]
+  chatConversations ChatConversation[]
   pointTxns     PointTransaction[]
   userCoupons   UserCoupon[]
   /// 本人专属邀请码（注册时自动生成，用于推广）。唯一。
@@ -508,4 +509,52 @@ model Consultation {
   @@index([status])
   @@index([createdAt])
   @@index([productId])
+}
+
+// ---------------- 站内实时客服（IM） ----------------
+/// 客服会话：游客或登录用户与客服之间的对话容器。
+/// 未登录访客凭 guestToken（存浏览器 localStorage）继续同一会话，防止串号。
+model ChatConversation {
+  id          String   @id @default(cuid())
+  /// 访客昵称（游客填写；登录用户可空，取账户名）
+  visitorName String?
+  /// 联系方式类型：email | phone | none
+  contactType String   @default("none") // email | phone | none
+  /// 联系内容（邮箱或手机号），游客留资用
+  contact     String?
+  /// 关联登录用户（登录后发起会话时记录，游客为空）
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// 游客身份令牌：未登录访客凭此令牌 + conversationId 继续会话与收发消息
+  guestToken  String?  @unique
+  /// 会话状态：open | closed
+  status      String   @default("open")
+  /// 访客发起时所在语种（ko | zh | en），便于客服区分
+  locale      String   @default("ko")
+  /// 最后一条消息时间，列表排序用
+  lastMessageAt DateTime @default(now())
+  messages    ChatMessage[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, lastMessageAt])
+  @@index([userId])
+}
+
+/// 客服消息：单条聊天内容（文本或图片）。
+model ChatMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// 发送方：visitor | admin | system
+  sender         String // visitor | admin | system
+  /// 文本内容（图片消息时可为空，imageUrl 承载）
+  content        String?
+  /// 图片 URL（OSS 或 /uploads 本地），文本消息为空
+  imageUrl       String?
+  /// 是否已读（未读 = 对方尚未查看）。用于红点计数
+  read           Boolean @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
 }

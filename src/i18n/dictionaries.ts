@@ -848,6 +848,34 @@ export type AdminDict = {
   csMarkContacted: string;
   csClose: string;
   csTip: string;
+  // 实时客服（IM）
+  imTitle: string;
+  imStartTitle: string;
+  imNamePh: string;
+  imContactType: string;
+  imContactEmail: string;
+  imContactPhone: string;
+  imContactNone: string;
+  imContactPh: string;
+  imStart: string;
+  imInputPh: string;
+  imSend: string;
+  imAttach: string;
+  imYou: string;
+  imAdmin: string;
+  imVisitor: string;
+  imUnread: string;
+  imMarkRead: string;
+  imClose: string;
+  imReopen: string;
+  imClosed: string;
+  imNoConversation: string;
+  imSelectConv: string;
+  imConnLost: string;
+  imLeaveContact: string;
+  imRetry: string;
+  imUploading: string;
+  imDesktopNotify: string;
   // GEO 组件
   gkCommonFaq: string;
   gkLoading: string;
@@ -1704,6 +1732,33 @@ const ko: Dict = {
     csMarkContacted: '연락 완료로 표시',
     csClose: '종결',
     csTip: '팁: Kakao 상담 링크는 「SEO 설정」의 kakao.consultUrl에서 설정합니다. 미설정 시 프론트에 Kakao 메뉴가 표시되지 않습니다(기본 링크로 대체되지 않음).',
+    imTitle: '실시간 상담',
+    imStartTitle: '상담을 시작합니다',
+    imNamePh: '이름(선택)',
+    imContactType: '연락처 유형',
+    imContactEmail: '이메일',
+    imContactPhone: '전화',
+    imContactNone: '미입력',
+    imContactPh: '이메일 또는 전화번호(선택)',
+    imStart: '대화 시작',
+    imInputPh: '메시지를 입력하세요…',
+    imSend: '전송',
+    imAttach: '이미지',
+    imYou: '나',
+    imAdmin: '상담사',
+    imVisitor: '방문자',
+    imUnread: '{n}건 안읽음',
+    imMarkRead: '읽음 처리',
+    imClose: '상담 종료',
+    imReopen: '재개',
+    imClosed: '종료된 상담',
+    imNoConversation: '상담 내역이 없습니다',
+    imSelectConv: '왼쪽에서 상담을 선택하세요',
+    imConnLost: '연결 끊김, 재연결 중…',
+    imLeaveContact: '답변을 위해 연락처를 남겨주세요',
+    imRetry: '다시 시도',
+    imUploading: '업로드 중…',
+    imDesktopNotify: '새 메시지 알림',
     gkCommonFaq: '자주 묻는 질문',
     gkLoading: '불러오는 중…',
     gkKindFact: '기본 사실',
@@ -2559,6 +2614,33 @@ const zh: Dict = {
     csMarkContacted: '标为已联系',
     csClose: '关闭',
     csTip: '提示：Kakao 咨询链接在「SEO 设置」里以 kakao.consultUrl 配置，未配置时前台不显示 Kakao 入口（不会回退到任何默认链接）。',
+    imTitle: '实时客服',
+    imStartTitle: '开始咨询',
+    imNamePh: '称呼（选填）',
+    imContactType: '联系方式',
+    imContactEmail: '邮箱',
+    imContactPhone: '电话',
+    imContactNone: '不留存',
+    imContactPh: '邮箱或手机号（选填）',
+    imStart: '开始对话',
+    imInputPh: '输入消息…',
+    imSend: '发送',
+    imAttach: '图片',
+    imYou: '我',
+    imAdmin: '客服',
+    imVisitor: '访客',
+    imUnread: '{n} 条未读',
+    imMarkRead: '标为已读',
+    imClose: '结束会话',
+    imReopen: '重新打开',
+    imClosed: '会话已结束',
+    imNoConversation: '暂无会话',
+    imSelectConv: '选择左侧会话开始回复',
+    imConnLost: '连接中断，正在重连…',
+    imLeaveContact: '为方便回复，可留下邮箱或电话',
+    imRetry: '重试',
+    imUploading: '上传中…',
+    imDesktopNotify: '新消息提醒',
     gkCommonFaq: '常见问题',
     gkLoading: '加载中…',
     gkKindFact: '基本事实',
@@ -3415,6 +3497,33 @@ const en: Dict = {
     csMarkContacted: 'Mark contacted',
     csClose: 'Close',
     csTip: 'Tip: the Kakao inquiry link is configured as kakao.consultUrl in SEO Settings. When unset, the storefront shows no Kakao entry (no default fallback).',
+    imTitle: 'Live Chat',
+    imStartTitle: 'Start a conversation',
+    imNamePh: 'Name (optional)',
+    imContactType: 'Contact type',
+    imContactEmail: 'Email',
+    imContactPhone: 'Phone',
+    imContactNone: 'No contact',
+    imContactPh: 'Email or phone (optional)',
+    imStart: 'Start chat',
+    imInputPh: 'Type a message…',
+    imSend: 'Send',
+    imAttach: 'Image',
+    imYou: 'You',
+    imAdmin: 'Support',
+    imVisitor: 'Visitor',
+    imUnread: '{n} unread',
+    imMarkRead: 'Mark read',
+    imClose: 'Close chat',
+    imReopen: 'Reopen',
+    imClosed: 'Closed',
+    imNoConversation: 'No conversations',
+    imSelectConv: 'Select a conversation on the left',
+    imConnLost: 'Connection lost, reconnecting…',
+    imLeaveContact: 'Leave your email or phone so we can follow up',
+    imRetry: 'Retry',
+    imUploading: 'Uploading…',
+    imDesktopNotify: 'New message',
     gkCommonFaq: 'FAQ',
     gkLoading: 'Loading…',
     gkKindFact: 'Fact',
