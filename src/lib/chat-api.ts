@@ -42,6 +42,7 @@ export async function sendMessageRest(data: {
   content?: string;
   imageUrl?: string;
   guest?: string;
+  clientId?: string;
 }) {
   return toJson(
     await fetch('/api/chat/messages', {

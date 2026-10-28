@@ -11,6 +11,8 @@ export type ChatMsg = {
   read: boolean;
   createdAt: string;
   clientId?: string | null;
+  /** 单调序号：与时区无关的稳定排序键 */
+  seq?: number | null;
 };
 
 type Listener = (payload: any) => void;
@@ -44,6 +46,10 @@ export class ChatSocket {
   private closedByUser = false;
   private reconnectTimer: any = null;
   status: ChatStatus = 'connecting';
+  /** 已收到服务端回执（确认落库）的 clientId 集合 */
+  private acked = new Set<string>();
+  /** clientId -> 等待回执的超时定时器 */
+  private pendingAcks = new Map<string, any>();
 
   constructor(role: 'admin' | 'visitor', auth: any) {
     this.role = role;
@@ -101,11 +107,26 @@ export class ChatSocket {
   private handle(msg: any) {
     if (!msg || !msg.type) return;
     if (msg.type === 'authed') this.emit('authed', msg);
-    else if (msg.type === 'message') this.emit('message', msg);
-    else if (msg.type === 'convUpdate') this.emit('convUpdate', msg);
+    else if (msg.type === 'message') {
+      // 服务端回执：同 clientId 的消息已确认落库
+      const cid = msg.message?.clientId;
+      if (cid && this.pendingAcks.has(cid)) {
+        clearTimeout(this.pendingAcks.get(cid));
+        this.pendingAcks.delete(cid);
+        this.acked.add(cid);
+      }
+      this.emit('message', msg);
+    } else if (msg.type === 'convUpdate') this.emit('convUpdate', msg);
     else if (msg.type === 'read') this.emit('read', msg);
     else if (msg.type === 'typing') this.emit('typing', msg);
-    else if (msg.type === 'error') this.emit('error', msg);
+    else if (msg.type === 'error') {
+      // 服务端明确拒绝（如 NO_CONVERSATION）：解除该 clientId 的等待，让调用方走 REST 兜底
+      if (msg.clientId && this.pendingAcks.has(msg.clientId)) {
+        clearTimeout(this.pendingAcks.get(msg.clientId));
+        this.pendingAcks.delete(msg.clientId);
+      }
+      this.emit('error', msg);
+    }
   }
 
   private scheduleReconnect() {
@@ -132,9 +153,55 @@ export class ChatSocket {
     }
     return false;
   }
-  sendMessage(content: string | null, imageUrl: string | null, clientId: string) {
-    return this.send({ type: 'message', content, imageUrl, clientId });
+
+  /**
+   * 发送消息。返回 true 表示帧已发出（不代表服务端已落库）。
+   * 会等待服务端回执（回显的 message 带同一 clientId）：
+   *   - ackTimeoutMs 内收到回执 → 触发 'acked'
+   *   - 超时或服务端返回 error → 触发 'sendFallback'，由上层改走 REST 补发
+   * conversationId：visitor 由服务端从连接元数据推断；admin 必须显式传入。
+   */
+  sendMessage(
+    content: string | null,
+    imageUrl: string | null,
+    clientId: string,
+    conversationId?: string | null
+  ) {
+    const payload: any = { type: 'message', content, imageUrl, clientId };
+    if (conversationId) payload.conversationId = conversationId;
+
+    const ok = this.send(payload);
+    if (!ok) return false;
+
+    // 已确认过（重复发送同一条）→ 直接视为成功
+    if (this.acked.has(clientId)) {
+      this.emit('acked', { clientId });
+      return true;
+    }
+
+    if (!this.pendingAcks.has(clientId)) {
+      const timer = setTimeout(() => {
+        this.pendingAcks.delete(clientId);
+        this.emit('sendFallback', { clientId, content, imageUrl, conversationId });
+      }, 3000);
+      this.pendingAcks.set(clientId, timer);
+    }
+    return true;
   }
+  /** 标记某 clientId 已确认（REST 补发成功后调用） */
+  markAcked(clientId: string) {
+    this.acked.add(clientId);
+    const t = this.pendingAcks.get(clientId);
+    if (t) {
+      clearTimeout(t);
+      this.pendingAcks.delete(clientId);
+    }
+  }
+
+  isAcked(clientId: string) {
+    return this.acked.has(clientId);
+  }
+
   sendRead(conversationId: string) {
     return this.send({ type: 'read', conversationId });
   }
@@ -144,6 +211,8 @@ export class ChatSocket {
   close() {
     this.closedByUser = true;
     clearTimeout(this.reconnectTimer);
+    for (const t of this.pendingAcks.values()) clearTimeout(t);
+    this.pendingAcks.clear();
     try {
       this.ws?.close();
     } catch {

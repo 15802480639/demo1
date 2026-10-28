@@ -86,6 +86,11 @@ export function ChatAdmin() {
   const endRef = useRef<HTMLDivElement | null>(null);
   const selectedRef = useRef<string | null>(null);
   const notifiedRef = useRef(false);
+  // 兜底发送函数的最新实现（sendFallback 回调注册在只跑一次的 effect 里，
+  // 直接引用会捕获旧闭包，用 ref 避免）
+  const sendViaRestRef = useRef<
+    (clientId: string, text: string | null, convId?: string | null) => Promise<void>
+  >(async () => {});
 
   useEffect(() => {
     selectedRef.current = selectedId;
@@ -93,6 +98,7 @@ export function ChatAdmin() {
 
   const upsert = useCallback((m: ChatMsg) => {
     setMessages((prev) => {
+      // 1) 服务端回执替换同 clientId 的乐观临时消息
       if (m.clientId) {
         const idx = prev.findIndex((x) => x.clientId === m.clientId && x.id.startsWith('temp-'));
         if (idx >= 0) {
@@ -101,6 +107,7 @@ export function ChatAdmin() {
           return next;
         }
       }
+      // 2) 已存在同 id → 忽略
       if (prev.some((x) => x.id === m.id)) return prev;
       return [...prev, m];
     });
@@ -164,6 +171,11 @@ export function ChatAdmin() {
       }
     });
 
+    // WS 未在超时内回执 → 用同一 clientId 走 REST 补发（幂等）
+    sock.on('sendFallback', (p: any) => {
+      sendViaRestRef.current(p.clientId, p.content ?? null, p.conversationId ?? null);
+    });
+
     sock.connect();
     return () => sock.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,16 +216,41 @@ export function ChatAdmin() {
   async function send(text: string | null) {
     if (!selectedId) return;
     const clientId = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-    // 不先塞临时消息：以 WS 回显 / REST 返回为准，避免轮询覆盖时产生重复
-    if (!socketRef.current?.sendMessage(text, null, clientId)) {
-      try {
-        const d = await sendMessageRest({ conversationId: selectedId, content: text || undefined });
-        upsert({ ...d.message, clientId });
-      } catch {
-        /* ignore */
-      }
+    const temp: ChatMsg = {
+      id: 'temp-' + clientId,
+      sender: 'admin',
+      content: text,
+      read: false,
+      createdAt: new Date().toISOString(),
+      clientId,
+    };
+    setMessages((prev) => [...prev, temp]);
+    scrollBottom();
+    // ⚠️ admin 走 WS 时必须显式带 conversationId（服务端无法从连接元数据推断）
+    if (!socketRef.current?.sendMessage(text, null, clientId, selectedId)) {
+      await sendViaRest(clientId, text);
     }
   }
+
+  /** REST 兜底发送：带同一 clientId，服务端按唯一索引幂等，不会重复落库。
+   *  用 selectedRef 取当前会话（sendFallback 回调注册在只跑一次的 effect 里，闭包会捕获旧的 selectedId）。 */
+  async function sendViaRest(clientId: string, text: string | null, convId?: string | null) {
+    const cid = convId || selectedRef.current;
+    if (!cid) return;
+    try {
+      const d = await sendMessageRest({
+        conversationId: cid,
+        content: text || undefined,
+        clientId,
+      });
+      upsert({ ...d.message, clientId });
+      socketRef.current?.markAcked(clientId);
+    } catch {
+      /* ignore */
+    }
+  }
+  // 始终指向最新实现
+  sendViaRestRef.current = sendViaRest;
 
   function onSend() {
     const v = input.trim();
@@ -227,7 +264,20 @@ export function ChatAdmin() {
     if (!selectedId) return;
     const iv = setInterval(() => {
       getConversation(selectedId)
-        .then((d) => setMessages(d.messages || []))
+        .then((d) => {
+          // 合并而非整体覆盖：保留尚未收到回执的乐观临时消息
+          setMessages((prev) => {
+            const next = [...prev];
+            for (const m of d.messages || []) {
+              const idx = next.findIndex(
+                (x) => x.id === m.id || (m.clientId && x.clientId === m.clientId)
+              );
+              if (idx >= 0) next[idx] = m;
+              else next.push(m);
+            }
+            return next;
+          });
+        })
         .catch(() => {});
     }, 3000);
     return () => clearInterval(iv);
@@ -248,12 +298,16 @@ export function ChatAdmin() {
   const sel = convs.find((c) => c.id === selectedId) || null;
   const totalUnread = convs.reduce((a, c) => a + (c.unreadAdmin || 0), 0);
 
-  // 渲染前严格按发送时间升序排序，保证客服回复与访客提问交错正确
+  // 渲染前排序：以服务端 seq（单调序号，与时区无关）为主，
+  // 乐观临时消息没有 seq → 用 createdAt 兜底，保证客服回复与访客提问严格按发生顺序交错。
   const sortedMessages = useMemo(
     () =>
-      [...messages].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      ),
+      [...messages].sort((a, b) => {
+        const sa = a.seq ?? null;
+        const sb = b.seq ?? null;
+        if (sa != null && sb != null && sa !== sb) return sa - sb;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }),
     [messages]
   );
 

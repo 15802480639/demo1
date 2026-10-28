@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, requireAdmin, HttpError } from '@/lib/auth';
+import { isoUtcSql } from '@/lib/chat-time';
 
 // 校验访客身份：URL 上的 ?guest= 必须与会话 guestToken 一致
 async function verifyGuest(conversationId: string, guest: string | null) {
@@ -26,14 +27,62 @@ export async function GET(
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
-  const conv = await prisma.chatConversation.findUnique({
-    where: { id },
-    include: {
-      messages: { orderBy: { createdAt: 'asc' } },
-      user: { select: { name: true, username: true, email: true } },
-    },
-  });
+  // ⚠️ 必须用 raw 查询取字面 UTC ISO 字符串：
+  //    Prisma 的 adapter 读 timestamptz 会按会话时区壁钟解读（实测多 9 小时），
+  //    与 WS 推送的时间不一致会导致前端排序错乱。to_char 在 SQL 层直接产出字符串。
+  const [conv] = await prisma.$queryRaw<
+    {
+      id: string;
+      visitorName: string | null;
+      contactType: string;
+      contact: string | null;
+      status: string;
+      locale: string;
+      userName: string | null;
+      userUsername: string | null;
+      userEmail: string | null;
+    }[]
+  >`
+    SELECT c."id",
+           c."visitorName",
+           c."contactType",
+           c."contact",
+           c."status",
+           c."locale",
+           u."name"   AS "userName",
+           u."username" AS "userUsername",
+           u."email"  AS "userEmail"
+    FROM "ChatConversation" c
+    LEFT JOIN "User" u ON u."id" = c."userId"
+    WHERE c."id" = ${id}
+  `;
   if (!conv) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+
+  // 按 seq（单调序号，与时区无关）排序：同一毫秒内的多条消息也有确定先后
+  const messages = await prisma.$queryRaw<
+    {
+      id: string;
+      sender: string;
+      content: string | null;
+      imageUrl: string | null;
+      read: boolean;
+      clientId: string | null;
+      seq: number;
+      createdAt: string;
+    }[]
+  >`
+    SELECT m."id",
+           m."sender",
+           m."content",
+           m."imageUrl",
+           m."read",
+           m."clientId",
+           m."seq",
+           ${isoUtcSql('m."createdAt"')} AS "createdAt"
+    FROM "ChatMessage" m
+    WHERE m."conversationId" = ${id}
+    ORDER BY m."seq" ASC
+  `;
 
   return NextResponse.json({
     conversation: {
@@ -43,17 +92,19 @@ export async function GET(
       contact: conv.contact,
       status: conv.status,
       locale: conv.locale,
-      user: conv.user
-        ? { name: conv.user.name, username: conv.user.username, email: conv.user.email }
+      user: conv.userName || conv.userUsername || conv.userEmail
+        ? { name: conv.userName, username: conv.userUsername, email: conv.userEmail }
         : null,
     },
-    messages: conv.messages.map((m) => ({
+    messages: messages.map((m) => ({
       id: m.id,
       sender: m.sender,
       content: m.content,
       imageUrl: m.imageUrl,
       read: m.read,
       createdAt: m.createdAt,
+      clientId: m.clientId,
+      seq: m.seq,
     })),
   });
 }

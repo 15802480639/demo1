@@ -79,9 +79,15 @@ export function ChatWidget() {
   const socketRef = useRef<ChatSocket | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // 兜底发送函数的最新实现（sendFallback 回调注册在长生命周期的 socket 上，
+  // 用 ref 避免闭包捕获旧实现）
+  const sendViaRestRef = useRef<
+    (clientId: string, text: string | null, imageUrl: string | null, cid?: string, gst?: string) => Promise<void>
+  >(async () => {});
 
   const upsert = useCallback((m: ChatMsg) => {
     setMessages((prev) => {
+      // 1) 服务端回执替换同 clientId 的乐观临时消息
       if (m.clientId) {
         const idx = prev.findIndex((x) => x.clientId === m.clientId && x.id.startsWith('temp-'));
         if (idx >= 0) {
@@ -90,6 +96,7 @@ export function ChatWidget() {
           return next;
         }
       }
+      // 2) 已存在同 id → 忽略
       if (prev.some((x) => x.id === m.id)) return prev;
       return [...prev, m];
     });
@@ -121,6 +128,10 @@ export function ChatWidget() {
           beep();
         }
         scrollBottom();
+      });
+      // WS 未在超时内回执（服务端丢弃/断连）→ 用同一 clientId 走 REST 补发（幂等）
+      sock.on('sendFallback', (p: any) => {
+        sendViaRestRef.current(p.clientId, p.content ?? null, p.imageUrl ?? null, id, g);
       });
       sock.connect();
     },
@@ -165,9 +176,20 @@ export function ChatWidget() {
     const iv = setInterval(() => {
       getConversation(convId, guest)
         .then((d) => {
-          setMessages(d.messages || []);
+          // 合并而非整体覆盖：保留尚未收到回执的乐观临时消息，避免闪烁/丢失
+          setMessages((prev) => {
+            const next = [...prev];
+            for (const m of d.messages || []) {
+              const idx = next.findIndex(
+                (x) => x.id === m.id || (m.clientId && x.clientId === m.clientId)
+              );
+              if (idx >= 0) next[idx] = m;
+              else next.push(m);
+            }
+            return next;
+          });
           if (!openRef.current) {
-            setUnread(d.messages.filter((m: ChatMsg) => m.sender === 'admin' && !m.read).length);
+            setUnread((d.messages || []).filter((m: ChatMsg) => m.sender === 'admin' && !m.read).length);
           }
         })
         .catch(() => {});
@@ -200,16 +222,51 @@ export function ChatWidget() {
   async function send(text: string | null, imageUrl: string | null) {
     if (!convId || !guest) return;
     const clientId = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-    // 不先塞临时消息：以 WS 回显 / REST 返回为准，避免轮询覆盖时产生重复
-    if (!socketRef.current?.sendMessage(text, imageUrl, clientId)) {
-      try {
-        const d = await sendMessageRest({ conversationId: convId, content: text || undefined, imageUrl: imageUrl || undefined, guest });
-        upsert({ ...d.message, clientId });
-      } catch {
-        /* ignore */
-      }
+    const temp: ChatMsg = {
+      id: 'temp-' + clientId,
+      sender: 'visitor',
+      content: text,
+      imageUrl,
+      read: false,
+      createdAt: new Date().toISOString(),
+      clientId,
+    };
+    setMessages((prev) => [...prev, temp]);
+    scrollBottom();
+    if (!socketRef.current?.sendMessage(text, imageUrl, clientId, convId)) {
+      // WS 不可用 → 直接走 REST
+      await sendViaRest(clientId, text, imageUrl);
     }
   }
+
+  /** REST 兜底发送：带同一 clientId，服务端按唯一索引幂等，不会重复落库。
+   *  显式传入会话 id/guest，避免闭包捕获过期的 state。 */
+  async function sendViaRest(
+    clientId: string,
+    text: string | null,
+    imageUrl: string | null,
+    cid?: string,
+    gst?: string
+  ) {
+    const id = cid || convId;
+    const g = gst || guest;
+    if (!id || !g) return;
+    try {
+      const d = await sendMessageRest({
+        conversationId: id,
+        content: text || undefined,
+        imageUrl: imageUrl || undefined,
+        guest: g,
+        clientId,
+      });
+      upsert({ ...d.message, clientId });
+      socketRef.current?.markAcked(clientId);
+    } catch {
+      /* ignore */
+    }
+  }
+  // 始终指向最新实现
+  sendViaRestRef.current = sendViaRest;
 
   function onSend() {
     const v = input.trim();
@@ -234,12 +291,16 @@ export function ChatWidget() {
     }
   }
 
-  // 渲染前严格按发送时间升序排序，保证客服回复与访客提问交错正确
+  // 渲染前排序：以服务端 seq（单调序号，与时区无关）为主，
+  // 乐观临时消息没有 seq → 用 createdAt 兜底，保证客服回复与访客提问严格按发生顺序交错。
   const sortedMessages = useMemo(
     () =>
-      [...messages].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      ),
+      [...messages].sort((a, b) => {
+        const sa = a.seq ?? null;
+        const sb = b.seq ?? null;
+        if (sa != null && sb != null && sa !== sb) return sa - sb;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }),
     [messages]
   );
 

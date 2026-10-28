@@ -77,6 +77,13 @@ function broadcastToVisitors(conversationId, obj) {
 }
 
 // ---------- DB 操作 ----------
+// ⚠️ 时间戳统一走 to_char(... AT TIME ZONE 'UTC') 生成 UTC ISO 字符串：
+//    Prisma adapter 读 timestamptz 会按会话时区壁钟解读（实测多 9 小时），
+//    若 WS 侧用驱动解析、REST 侧用 Prisma 解析，两边会差一个时区 → 前端排序错乱。
+//    两边都用字面 UTC 字符串即可保证绝对时刻一致。
+const ISO_UTC_SQL = (col) =>
+  `to_char(${col} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
 async function getConversation(id) {
   const r = await pool.query(
     `SELECT "id", "guestToken", "status", "userId" FROM "ChatConversation" WHERE "id" = $1`,
@@ -85,19 +92,46 @@ async function getConversation(id) {
   return r.rows[0] || null;
 }
 
-async function insertMessage(conversationId, sender, content, imageUrl) {
-  const id = crypto.randomUUID();
+async function insertMessage(conversationId, sender, content, imageUrl, clientId) {
+  // 幂等：同一 conversationId + clientId 只落一条（WS 与 REST 双通道可能重复提交）
   const r = await pool.query(
-    `INSERT INTO "ChatMessage" ("id", "conversationId", "sender", "content", "imageUrl", "read", "createdAt")
-     VALUES ($1, $2, $3, $4, $5, false, now())
-     RETURNING "id", "sender", "content", "imageUrl", "read", "createdAt"`,
-    [id, conversationId, sender, content ?? null, imageUrl ?? null]
+    `INSERT INTO "ChatMessage" ("id", "conversationId", "sender", "content", "imageUrl", "clientId", "read", "createdAt")
+     VALUES ($1, $2, $3, $4, $5, $6, false, now())
+     ON CONFLICT ("conversationId", "clientId") DO NOTHING
+     RETURNING "id", "sender", "content", "imageUrl", "read", "clientId", "seq",
+               ${ISO_UTC_SQL('"createdAt"')} AS "createdAtIso"`,
+    [crypto.randomUUID(), conversationId, sender, content ?? null, imageUrl ?? null, clientId ?? crypto.randomUUID()]
   );
+
+  let row = r.rows[0];
+  if (!row) {
+    // 冲突（重复提交）→ 取回已存在的那条
+    const dup = await pool.query(
+      `SELECT "id", "sender", "content", "imageUrl", "read", "clientId", "seq",
+              ${ISO_UTC_SQL('"createdAt"')} AS "createdAtIso"
+       FROM "ChatMessage" WHERE "conversationId" = $1 AND "clientId" = $2`,
+      [conversationId, clientId]
+    );
+    row = dup.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      conversationId,
+      sender: row.sender,
+      content: row.content,
+      imageUrl: row.imageUrl,
+      read: row.read,
+      createdAt: row.createdAtIso,
+      seq: row.seq,
+      clientId: row.clientId,
+      duplicate: true,
+    };
+  }
+
   await pool.query(
     `UPDATE "ChatConversation" SET "lastMessageAt" = now(), "updatedAt" = now() WHERE "id" = $1`,
     [conversationId]
   );
-  const row = r.rows[0];
   return {
     id: row.id,
     conversationId,
@@ -105,7 +139,10 @@ async function insertMessage(conversationId, sender, content, imageUrl) {
     content: row.content,
     imageUrl: row.imageUrl,
     read: row.read,
-    createdAt: row.createdAt.toISOString(),
+    createdAt: row.createdAtIso,
+    seq: row.seq,
+    clientId: row.clientId,
+    duplicate: false,
   };
 }
 
@@ -202,12 +239,12 @@ wss.on('connection', (ws) => {
 
     try {
       if (msg.type === 'message') {
-        // 确定会话
+        // 确定会话：visitor 从连接元数据取；admin 必须由客户端显式带 conversationId
         let conversationId = null;
         if (ws.meta.role === 'visitor') {
           conversationId = ws.meta.conversationId;
         } else if (ws.meta.role === 'admin') {
-          conversationId = msg.conversationId;
+          conversationId = typeof msg.conversationId === 'string' ? msg.conversationId : null;
         }
         if (!conversationId) {
           send(ws, { type: 'error', message: 'NO_CONVERSATION' });
@@ -225,11 +262,16 @@ wss.on('connection', (ws) => {
           send(ws, { type: 'error', message: 'EMPTY_MESSAGE' });
           return;
         }
-        const message = await insertMessage(conversationId, sender, content, imageUrl);
+        const clientId = typeof msg.clientId === 'string' && msg.clientId ? msg.clientId : null;
+        const message = await insertMessage(conversationId, sender, content, imageUrl, clientId);
+        if (!message) {
+          send(ws, { type: 'error', message: 'INSERT_FAILED' });
+          return;
+        }
         const envelope = {
           type: 'message',
           conversationId,
-          message: { ...message, clientId: msg.clientId || null },
+          message: { ...message, clientId: clientId ?? message.clientId },
         };
         // 推给所有客服 + 该会话访客（含发送者，靠 clientId 去重）
         broadcastToAdmins(envelope);

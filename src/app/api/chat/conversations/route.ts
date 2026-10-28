@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { getSession, requireAdmin, HttpError } from '@/lib/auth';
+import { isoUtcSql } from '@/lib/chat-time';
 
 // GET /api/chat/conversations —— 管理员拉取会话列表（含未读数与末条预览）
 export async function GET() {
@@ -12,13 +13,49 @@ export async function GET() {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
-  const convs = await prisma.chatConversation.findMany({
-    orderBy: { lastMessageAt: 'desc' },
-    include: {
-      user: { select: { name: true, username: true, email: true } },
-      messages: { take: 1, orderBy: { createdAt: 'desc' } },
-    },
-  });
+  // ⚠️ 用 raw 查询取字面 UTC ISO 字符串：Prisma adapter 读 timestamptz 会按会话时区
+  //    壁钟解读（实测多 9 小时），与 WS 推送时间不一致会导致前端排序错乱。
+  const convs = await prisma.$queryRaw<
+    {
+      id: string;
+      visitorName: string | null;
+      contactType: string;
+      contact: string | null;
+      status: string;
+      locale: string;
+      lastMessageAt: string;
+      userName: string | null;
+      userUsername: string | null;
+      userEmail: string | null;
+      lastContent: string | null;
+      lastImageUrl: string | null;
+      lastSender: string | null;
+    }[]
+  >`
+    SELECT c."id",
+           c."visitorName",
+           c."contactType",
+           c."contact",
+           c."status",
+           c."locale",
+           ${isoUtcSql('c."lastMessageAt"')} AS "lastMessageAt",
+           u."name"     AS "userName",
+           u."username" AS "userUsername",
+           u."email"    AS "userEmail",
+           lm."content"   AS "lastContent",
+           lm."imageUrl"  AS "lastImageUrl",
+           lm."sender"    AS "lastSender"
+    FROM "ChatConversation" c
+    LEFT JOIN "User" u ON u."id" = c."userId"
+    LEFT JOIN LATERAL (
+      SELECT m."content", m."imageUrl", m."sender"
+      FROM "ChatMessage" m
+      WHERE m."conversationId" = c."id"
+      ORDER BY m."seq" DESC
+      LIMIT 1
+    ) lm ON true
+    ORDER BY c."lastMessageAt" DESC
+  `;
 
   const ids = convs.map((c) => c.id);
   const unread = ids.length
@@ -30,24 +67,22 @@ export async function GET() {
     : [];
   const unreadMap = Object.fromEntries(unread.map((u) => [u.conversationId, u._count]));
 
-  const rows = convs.map((c) => {
-    const last = c.messages[0];
-    return {
-      id: c.id,
-      visitorName: c.visitorName,
-      contactType: c.contactType,
-      contact: c.contact,
-      status: c.status,
-      locale: c.locale,
-      lastMessageAt: c.lastMessageAt,
-      unreadAdmin: unreadMap[c.id] || 0,
-      lastPreview: last ? (last.content || (last.imageUrl ? '[image]' : '')) : '',
-      lastSender: last?.sender || null,
-      user: c.user
-        ? { name: c.user.name, username: c.user.username, email: c.user.email }
+  const rows = convs.map((c) => ({
+    id: c.id,
+    visitorName: c.visitorName,
+    contactType: c.contactType,
+    contact: c.contact,
+    status: c.status,
+    locale: c.locale,
+    lastMessageAt: c.lastMessageAt,
+    unreadAdmin: unreadMap[c.id] || 0,
+    lastPreview: c.lastContent || (c.lastImageUrl ? '[image]' : ''),
+    lastSender: c.lastSender || null,
+    user:
+      c.userName || c.userUsername || c.userEmail
+        ? { name: c.userName, username: c.userUsername, email: c.userEmail }
         : null,
-    };
-  });
+  }));
 
   return NextResponse.json({ conversations: rows });
 }

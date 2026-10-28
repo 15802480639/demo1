@@ -531,11 +531,11 @@ model ChatConversation {
   status      String   @default("open")
   /// 访客发起时所在语种（ko | zh | en），便于客服区分
   locale      String   @default("ko")
-  /// 最后一条消息时间，列表排序用
-  lastMessageAt DateTime @default(now())
+  /// 最后一条消息时间，列表排序用（必须 Timestamptz，见 ChatMessage.createdAt 注释）
+  lastMessageAt DateTime @default(dbgenerated("now()")) @db.Timestamptz(3)
   messages    ChatMessage[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(dbgenerated("now()")) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([status, lastMessageAt])
   @@index([userId])
@@ -552,9 +552,20 @@ model ChatMessage {
   content        String?
   /// 图片 URL（OSS 或 /uploads 本地），文本消息为空
   imageUrl       String?
+  /// 客户端生成的幂等键：WS 与 REST 兜底重复提交时按此去重，避免重复落库。
+  /// 用 DB 级默认值，迁移才能安全加到已有表（Prisma 层默认值会阻止 ALTER）。
+  clientId       String           @default(dbgenerated("gen_random_uuid()"))
+  /// 单调递增序号：与时区无关的稳定排序键（同一毫秒内的多条消息按此定序）
+  seq            Int              @default(autoincrement())
   /// 是否已读（未读 = 对方尚未查看）。用于红点计数
   read           Boolean @default(false)
-  createdAt      DateTime @default(now())
+  /// 必须用 Timestamptz + dbgenerated(now())：
+  ///   裸 timestamp 会被 Prisma 与 node-pg 用不同基准解析（差一个时区），导致
+  ///   WS 推送与 REST 返回的 createdAt 不一致、消息排序错乱；
+  ///   dbgenerated 保证两种写入方（Prisma / 原生 SQL）都用数据库时钟。
+  createdAt      DateTime         @default(dbgenerated("now()")) @db.Timestamptz(3)
 
   @@index([conversationId, createdAt])
+  @@index([conversationId, seq])
+  @@unique([conversationId, clientId])
 }
