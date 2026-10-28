@@ -53,8 +53,8 @@ export function ChatWidget() {
   const { locale, dict } = useLocale();
   const t = dict.admin;
   const pathname = usePathname() || '';
-  // 后台管理页不显示站内客服入口
-  if (/^\/[a-z-]+\/admin(\/|$)/.test(pathname)) return null;
+  // 后台管理页不显示站内客服入口（提前 return 必须放在所有 hooks 之后，遵守 hooks 规则）
+  const isAdmin = /^\/[a-z-]+\/admin(\/|$)/.test(pathname);
 
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
@@ -129,6 +129,7 @@ export function ChatWidget() {
 
   // 初始化：从 localStorage 恢复会话
   useEffect(() => {
+    if (isAdmin) return;
     const id = localStorage.getItem(LS_ID);
     const g = localStorage.getItem(LS_GUEST);
     if (id && g) {
@@ -242,6 +243,9 @@ export function ChatWidget() {
       setUploading(false);
     }
   }
+
+  // 后台管理页不渲染站内客服入口
+  if (isAdmin) return null;
 
   return (
     <>

@@ -6,6 +6,8 @@ import type { NextConfig } from "next";
 // 目标服务器无需 npm install，直接 `node server.js` 即可运行。
 const nextConfig: NextConfig = {
   output: "standalone",
+  // ⚠️ 允许用 127.0.0.1 访问 dev（否则跨域被拦、JS chunk 加载失败、整页不 hydration、所有按钮点不动）
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   // ⚠️ ali-oss 必须外置（不参与打包）：
   //   它的传递依赖 urllib 里 require('proxy-agent')，而 proxy-agent → vm2
   //   带有非标准的预编译目录结构，Turbopack 打包器直接报
