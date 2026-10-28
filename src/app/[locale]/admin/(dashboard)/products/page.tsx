@@ -68,6 +68,25 @@ function firstImage(images: string): string | null {
     return null;
   }
 }
+
+/** 商品标签预设（多选用）。value 为存储值，显示名随后台语言切换。 */
+const PRODUCT_TAG_OPTIONS: { value: string; ko: string; zh: string; en: string }[] = [
+  { value: 'new', ko: '신상품', zh: '新品', en: 'New' },
+  { value: 'sale', ko: '세일', zh: '促销', en: 'Sale' },
+  { value: 'hot', ko: '인기', zh: '热卖', en: 'Hot' },
+  { value: 'best', ko: '베스트', zh: '精选', en: 'Best' },
+  { value: 'limited', ko: '한정', zh: '限量', en: 'Limited' },
+];
+const PRODUCT_TAG_VALUES = PRODUCT_TAG_OPTIONS.map((o) => o.value);
+
+function parseTagsToArray(s: string | null | undefined): string[] {
+  try {
+    const v = JSON.parse(s ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 function parseOpts(s: string | null): Record<string, string> {
   try {
     const o = JSON.parse(s ?? '{}');
@@ -350,7 +369,7 @@ function ProductForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { dict } = useLocale();
+  const { locale, dict } = useLocale();
   const t = dict.admin;
   const [name, setName] = useState(editing?.name ?? '');
   const [nameZh, setNameZh] = useState(editing?.nameZh ?? '');
@@ -365,14 +384,8 @@ function ProductForm({
   const [status, setStatus] = useState(editing?.status ?? 'draft');
   const [description, setDescription] = useState(editing?.description ?? '');
   const [descriptionZh, setDescriptionZh] = useState(editing?.descriptionZh ?? '');
-  const [tags, setTags] = useState(
-    (() => {
-      try {
-        return (JSON.parse(editing?.tags ?? '[]') as string[]).join(', ');
-      } catch {
-        return '';
-      }
-    })(),
+  const [tags, setTags] = useState<string[]>(
+    editing ? parseTagsToArray(editing.tags) : [],
   );
   const [images, setImages] = useState(
     (() => {
@@ -544,10 +557,7 @@ function ProductForm({
       status,
       description: description || undefined,
       descriptionZh: descriptionZh || undefined,
-      tags: tags
-        .split(',')
-        .map((x) => x.trim())
-        .filter(Boolean),
+      tags,
       images: images
         .split(/[\n,]/)
         .map((x) => x.trim())
@@ -838,7 +848,45 @@ function ProductForm({
         </div>
         <div>
           <label className={label}>{t.pTags}</label>
-          <input className={input} value={tags} onChange={(e) => setTags(e.target.value)} />
+          <div className="flex flex-wrap gap-2">
+            {PRODUCT_TAG_OPTIONS.map((opt) => {
+              const active = tags.includes(opt.value);
+              return (
+                <button
+                  type="button"
+                  key={opt.value}
+                  onClick={() =>
+                    setTags(
+                      active
+                        ? tags.filter((v) => v !== opt.value)
+                        : [...tags, opt.value],
+                    )
+                  }
+                  className={
+                    'px-3 py-1.5 rounded-full border text-sm transition ' +
+                    (active
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-black')
+                  }
+                >
+                  {opt[locale as 'ko' | 'zh' | 'en'] ?? opt.en}
+                </button>
+              );
+            })}
+            {tags
+              .filter((v) => !PRODUCT_TAG_VALUES.includes(v))
+              .map((v) => (
+                <span
+                  key={v}
+                  className="px-3 py-1.5 rounded-full border border-dashed border-gray-300 text-sm text-gray-400"
+                >
+                  {v}
+                </span>
+              ))}
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            多选标签，无需手敲；勾选「新品(New)」即出现在首页与“新品上架”导航
+          </p>
         </div>
         <div>
           <label className={label}>{t.pImages}</label>

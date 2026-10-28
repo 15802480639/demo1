@@ -588,6 +588,7 @@ export type AdminDict = {
   cLoading: string;
   cNoEmail: string;
   cJoinedAt: string;
+  cSelfReg: string;
   cOrderUnit: string;
   cPointsTip: string;
   cPointsUnit: string;
@@ -1452,6 +1453,7 @@ const ko: Dict = {
     cLoading: '불러오는 중…',
     cNoEmail: '이메일 없음',
     cJoinedAt: '{d} 가입',
+    cSelfReg: '직접 가입',
     cOrderUnit: '건',
     cPointsTip: '눌러서 포인트 수동 증감',
     cPointsUnit: '포인트',
@@ -2306,6 +2308,7 @@ const zh: Dict = {
     cLoading: '加载中…',
     cNoEmail: '未留邮箱',
     cJoinedAt: '注册于 {d}',
+    cSelfReg: '自主注册',
     cOrderUnit: '单',
     cPointsTip: '点击手动增减积分',
     cPointsUnit: '分',
@@ -3161,6 +3164,7 @@ const en: Dict = {
     cLoading: 'Loading…',
     cNoEmail: 'No email',
     cJoinedAt: 'Joined {d}',
+    cSelfReg: 'Self-registered',
     cOrderUnit: 'orders',
     cPointsTip: 'Click to manually adjust points',
     cPointsUnit: 'pts',

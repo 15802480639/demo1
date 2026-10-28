@@ -14,6 +14,9 @@ type Customer = {
   points: number;
   orderCount: number;
   spent: number;
+  inviteCode: string | null;
+  uplineInviteCode: string | null;
+  uplineUsername: string | null;
 };
 
 export default function AdminCustomersPage() {
@@ -161,6 +164,10 @@ export default function AdminCustomersPage() {
                   {c.username && c.email ? ' · ' : ''}
                   {c.email || t.cNoEmail} ·{' '}
                   {t.cJoinedAt.replace('{d}', new Date(c.createdAt).toLocaleDateString('zh-CN'))}
+                  {c.inviteCode ? ` · ${t.rfInviteCode}: ${c.inviteCode}` : ''}
+                  {c.uplineInviteCode
+                    ? ` · ${t.rfUpline}: ${c.uplineInviteCode}`
+                    : ` · ${t.cSelfReg}`}
                 </p>
               </div>
               <span className="text-sm w-20 text-center text-muted">

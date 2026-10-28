@@ -10,7 +10,10 @@ export async function GET() {
   const users = await prisma.user.findMany({
     where: { role: 'customer' },
     orderBy: { createdAt: 'desc' },
-    include: { orders: { select: { total: true } } },
+    include: {
+      orders: { select: { total: true } },
+      invitedBy: { select: { inviteCode: true, username: true } },
+    },
   });
   const customers = users.map((u) => ({
     id: u.id,
@@ -21,6 +24,9 @@ export async function GET() {
     points: u.points,
     orderCount: u.orders.length,
     spent: u.orders.reduce((sum, o) => sum + o.total, 0),
+    inviteCode: u.inviteCode,
+    uplineInviteCode: u.invitedBy?.inviteCode ?? null,
+    uplineUsername: u.invitedBy?.username ?? null,
   }));
   return NextResponse.json({ customers });
 }
