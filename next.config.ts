@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   //   带有非标准的预编译目录结构，Turbopack 打包器直接报
   //   "Can't resolve './ROOT/node_modules/vm2'"，构建必失败。
   // 外置后由 Node 在运行时从 node_modules require，standalone 产物会自动带上。
-  serverExternalPackages: ["ali-oss", "proxy-agent"],
+  serverExternalPackages: ["ali-oss", "proxy-agent", "@prisma/client"],
   // ⚠️ outputFileTracingRoot 必须显式指定为项目根。
   //   Next 16 对外置模块（serverExternalPackages）会在
   //   .next/standalone/.next/node_modules/ 下生成 **符号链接** 指向本机绝对路径，

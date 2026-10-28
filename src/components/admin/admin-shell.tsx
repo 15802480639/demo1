@@ -31,6 +31,7 @@ export function AdminShell({
     { href: '/admin/points', label: t.pointSettings },
     { href: '/admin/newsletter', label: t.navNewsletter },
     { href: '/admin/customers', label: t.customers },
+    { href: '/admin/referrals', label: t.referrals },
     { href: '/admin/banners', label: t.banners },
     { href: '/admin/content', label: t.siteContent },
     { href: '/admin/seo', label: t.seo },

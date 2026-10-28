@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       name: user.name,
       email: user.email,
       role: user.role,
+      inviteCode: user.inviteCode,
     };
     const token = createSessionToken(sessionUser);
     const res = NextResponse.json({ ok: true, user: sessionUser });

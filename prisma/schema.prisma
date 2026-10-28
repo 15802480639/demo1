@@ -31,6 +31,12 @@ model User {
   consultations Consultation[]
   pointTxns     PointTransaction[]
   userCoupons   UserCoupon[]
+  /// 本人专属邀请码（注册时自动生成，用于推广）。唯一。
+  inviteCode   String?   @unique
+  /// 上级（邀请人）用户 ID。自引用 1 级关系。
+  invitedById  String?
+  invitedBy    User?     @relation("UserReferral", fields: [invitedById], references: [id])
+  invitedUsers User[]    @relation("UserReferral")
 }
 
 model Address {

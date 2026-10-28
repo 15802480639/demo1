@@ -11,6 +11,7 @@ export function RegisterForm({ redirectTo }: { redirectTo: string }) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -33,7 +34,12 @@ export function RegisterForm({ redirectTo }: { redirectTo: string }) {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+          inviteCode: inviteCode.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -90,6 +96,19 @@ export function RegisterForm({ redirectTo }: { redirectTo: string }) {
           onChange={(e) => setEmail(e.target.value)}
           className={input}
           placeholder={dict.auth.emailHint}
+        />
+      </div>
+      <div>
+        <label className="text-xs tracking-widest text-muted">
+          {dict.auth.inviteCodeLabel}（{dict.auth.emailOptionalPh}）
+        </label>
+        <input
+          value={inviteCode}
+          onChange={(e) => setInviteCode(e.target.value)}
+          className={input}
+          placeholder={dict.auth.inviteCodePh}
+          autoCapitalize="characters"
+          style={{ textTransform: 'uppercase' }}
         />
       </div>
       {err && <p className="text-sm text-red-600">{err}</p>}

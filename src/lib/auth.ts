@@ -15,6 +15,7 @@ export type SessionUser = {
   name: string | null;
   email: string | null; // 邮箱选填后可为空
   role: string; // customer | admin
+  inviteCode?: string | null; // 本人专属邀请码（注册时生成 / 老用户懒补发）
 };
 
 function b64url(input: Buffer | string): string {

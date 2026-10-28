@@ -19,6 +19,13 @@ type NavCategory = {
   childSlugs: string[];
 };
 
+type NavItem = {
+  label: string;
+  href: string;
+  children?: { label: string; href: string; children?: { label: string; href: string }[] }[];
+  highlight?: boolean;
+};
+
 export function SiteHeader() {
   const { locale, dict } = useLocale();
   const { user, logout } = useAuth();
@@ -74,7 +81,7 @@ export function SiteHeader() {
   const catHref = (chain: NavCategory[]) =>
     `/${locale}/c/${chain.map((c) => encodeURIComponent(c.slug)).join('/')}`;
 
-  const nav = [
+  const nav: NavItem[] = [
     { label: dict.nav.shop, href: `/${locale}/products` },
     ...topCategories.map((c) => ({
       label: labelOf(c),
@@ -90,7 +97,7 @@ export function SiteHeader() {
     })),
     { label: dict.nav.women, href: `/${locale}/products?gender=women` },
     { label: dict.nav.men, href: `/${locale}/products?gender=men` },
-    { label: dict.nav.brands, href: `/${locale}/brands` },
+    { label: dict.nav.newArrivals, href: `/${locale}/products?new=1`, highlight: true },
     { label: dict.nav.sale, href: `/${locale}/products?sale=1` },
     { label: dict.nav.events, href: `/${locale}/events` },
   ];
@@ -145,6 +152,22 @@ export function SiteHeader() {
           <div className="flex items-center gap-5 whitespace-nowrap px-2">
           {nav.map((item) => {
             const isActive = pathname === item.href.split('?')[0];
+            // 高亮项（新品上架）：彩色胶囊 + NEW 角标，显著区别于普通文字导航
+            if (item.highlight) {
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className="relative inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold text-white bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 shadow-sm hover:shadow-md hover:opacity-95 transition-all"
+                >
+                  {item.label}
+                  <span className="absolute -top-2 -right-2 text-[9px] font-bold leading-none px-1.5 py-0.5 rounded-full bg-ink text-white ring-2 ring-surface">
+                    NEW
+                  </span>
+                </Link>
+              );
+            }
             const children = 'children' in item ? item.children : undefined;
             const hasChildren = !!children && children.length > 0;
             const isOpen = openMenu === item.href;
@@ -349,6 +372,23 @@ export function SiteHeader() {
               const children = 'children' in item ? item.children : undefined;
               const hasChildren = !!children && children.length > 0;
               const expanded = openCat === item.href;
+              // 高亮项（新品上架）：移动端也用彩色胶囊 + NEW 角标
+              if (item.highlight) {
+                return (
+                  <div key={item.href} className="border-b border-line last:border-0 py-3">
+                    <Link
+                      href={item.href}
+                      onClick={() => setMenuOpen(false)}
+                      className="relative inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400"
+                    >
+                      {item.label}
+                      <span className="text-[9px] font-bold leading-none px-1.5 py-0.5 rounded-full bg-ink text-white">
+                        NEW
+                      </span>
+                    </Link>
+                  </div>
+                );
+              }
               return (
                 <div key={item.href} className="border-b border-line last:border-0">
                   {hasChildren ? (

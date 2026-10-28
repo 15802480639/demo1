@@ -6,9 +6,11 @@ import { getSession } from '@/lib/auth';
 import { getOrdersByUser } from '@/lib/services/order-service';
 import { getUserPoints, getPointRule } from '@/lib/points';
 import { prisma } from '@/lib/prisma';
+import { getOrCreateInviteCode } from '@/lib/invite';
 import { AccountMenu } from '@/components/account/account-menu';
 import { AddressManager } from '@/components/account/address-manager';
 import { PasswordForm } from '@/components/account/password-form';
+import { InviteCodeCard } from '@/components/account/invite-code-card';
 
 export default async function AccountPage({
   params,
@@ -21,7 +23,7 @@ export default async function AccountPage({
   const session = await getSession();
   if (!session) redirect(`/${loc}/login?redirect=/${loc}/account`);
 
-  const [orders, points, rule, couponCount] = await Promise.all([
+  const [orders, points, rule, couponCount, inviteCode, me] = await Promise.all([
     getOrdersByUser(session.id),
     getUserPoints(session.id),
     getPointRule(),
@@ -34,6 +36,13 @@ export default async function AccountPage({
         },
       })
       .catch(() => 0),
+    getOrCreateInviteCode(session.id),
+    prisma.user.findUnique({
+      where: { id: session.id },
+      select: {
+        invitedBy: { select: { name: true, username: true } },
+      },
+    }),
   ]);
 
   return (
@@ -79,6 +88,25 @@ export default async function AccountPage({
       )}
 
       <AccountMenu ordersCount={orders.length} points={points} coupons={couponCount} />
+
+      {inviteCode && (
+        <div className="mt-6">
+          <InviteCodeCard
+            code={inviteCode}
+            labels={{
+              title: dict.account.inviteTitle,
+              desc: dict.account.inviteDesc,
+              codeLabel: dict.account.inviteCodeLabel,
+              copy: dict.account.copyBtn,
+              copied: dict.account.copied,
+              hint: dict.account.inviteHint,
+              uplineLabel: dict.account.uplineLabel,
+              uplineName:
+                me?.invitedBy?.name ?? me?.invitedBy?.username ?? null,
+            }}
+          />
+        </div>
+      )}
 
       <div className="mt-10 space-y-6">
         <AddressManager />

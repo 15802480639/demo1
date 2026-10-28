@@ -17,6 +17,8 @@ export type AuthDict = {
   passwordPh: string;
   emailOptionalPh: string;
   emailHint: string;
+  inviteCodeLabel: string;
+  inviteCodePh: string;
 };
 
 export type InfoDict = {
@@ -253,6 +255,15 @@ export type AccountDict = {
   notCancellable: string;
   cancelFailed: string;
   moreItems: string;
+  // 邀请码
+  inviteTitle: string;
+  inviteDesc: string;
+  inviteCodeLabel: string;
+  copyBtn: string;
+  copied: string;
+  inviteHint: string;
+  uplineLabel: string;
+  noUpline: string;
 };
 
 export type AdminDict = {
@@ -265,6 +276,14 @@ export type AdminDict = {
   orders: string;
   coupons: string;
   customers: string;
+  referrals: string;
+  referralsIntro: string;
+  rfSearch: string;
+  rfInviteCode: string;
+  rfUpline: string;
+  rfInvitees: string;
+  rfNoUpline: string;
+  rfNoInvitees: string;
   banners: string;
   seo: string;
   geo: string;
@@ -873,6 +892,8 @@ const ko: Dict = {
     passwordPh: '6자 이상',
     emailOptionalPh: '선택 입력',
     emailHint: '주문 알림 수신용, 선택 입력',
+    inviteCodeLabel: '상위 초대코드',
+    inviteCodePh: '초대받은 경우 입력 (선택)',
   },
   info: {
     demoNotice:
@@ -1082,6 +1103,14 @@ const ko: Dict = {
     requiredMissing: '필수 항목을 입력하세요',
     saveFailed: '저장에 실패했습니다',
     deleteConfirm: '이 배송지를 삭제할까요?',
+    inviteTitle: '내 초대코드',
+    inviteDesc: '아래 코드를 친구에게 공유하세요. 친구가 가입 시 이 코드를 입력하면 당신의 하위 회원이 됩니다.',
+    inviteCodeLabel: '초대코드',
+    copyBtn: '복사',
+    copied: '복사됨',
+    inviteHint: '코드 복사 후 카카오톡 등으로 공유',
+    uplineLabel: '초대한 사람',
+    noUpline: '직접 가입',
     changePassword: '비밀번호 변경',
     currentPassword: '현재 비밀번호',
     newPassword: '새 비밀번호 (6자 이상)',
@@ -1121,6 +1150,14 @@ const ko: Dict = {
     orders: '주문 관리',
     coupons: '쿠폰',
     customers: '고객',
+    referrals: '초대 관계',
+    referralsIntro: '회원의 초대코드와 상위/하위 관계를 확인합니다.',
+    rfSearch: '이름/이메일/초대코드 검색',
+    rfInviteCode: '초대코드',
+    rfUpline: '초대한 사람',
+    rfInvitees: '직접 초대',
+    rfNoUpline: '—',
+    rfNoInvitees: '0',
     banners: '배너',
     seo: 'SEO 설정',
     geo: 'GEO 지식베이스',
@@ -1710,6 +1747,8 @@ const zh: Dict = {
     passwordPh: '6 位以上',
     emailOptionalPh: '选填',
     emailHint: '用于接收订单通知，可不填',
+    inviteCodeLabel: '上级邀请码',
+    inviteCodePh: '被邀请时填写（选填）',
   },
   info: {
     demoNotice: '本页面为演示内容。正式上线前请替换为经法务审核的正式条款。',
@@ -1746,7 +1785,7 @@ const zh: Dict = {
     sale: '特惠',
     events: '活动',
     domestic: '国内配送',
-    newArrivals: '新品',
+    newArrivals: '新品上架',
     login: '登录',
     register: '注册',
     cart: '购物车',
@@ -1918,6 +1957,14 @@ const zh: Dict = {
     requiredMissing: '请填写必填项',
     saveFailed: '保存失败',
     deleteConfirm: '确定删除这个地址吗？',
+    inviteTitle: '我的邀请码',
+    inviteDesc: '把下面这串邀请码发给朋友，朋友注册时填你的码，就成为了你的下级。',
+    inviteCodeLabel: '邀请码',
+    copyBtn: '复制',
+    copied: '已复制',
+    inviteHint: '复制后通过 KakaoTalk 等发给朋友',
+    uplineLabel: '邀请人',
+    noUpline: '自主注册',
     changePassword: '修改密码',
     currentPassword: '当前密码',
     newPassword: '新密码（6 位以上）',
@@ -1957,6 +2004,14 @@ const zh: Dict = {
     orders: '订单管理',
     coupons: '优惠券',
     customers: '客户管理',
+    referrals: '邀请关系',
+    referralsIntro: '查看会员的邀请码与上级 / 下级关系。',
+    rfSearch: '按名称/邮箱/邀请码搜索',
+    rfInviteCode: '邀请码',
+    rfUpline: '邀请人',
+    rfInvitees: '直接邀请',
+    rfNoUpline: '—',
+    rfNoInvitees: '0',
     banners: '首页轮播',
     seo: 'SEO 设置',
     geo: 'GEO 知识库',
@@ -2546,6 +2601,8 @@ const en: Dict = {
     passwordPh: '6+ characters',
     emailOptionalPh: 'Optional',
     emailHint: 'For order notifications (optional)',
+    inviteCodeLabel: 'Referrer invite code',
+    inviteCodePh: 'Enter if invited (optional)',
   },
   info: {
     demoNotice:
@@ -2755,6 +2812,14 @@ const en: Dict = {
     requiredMissing: 'Required fields missing',
     saveFailed: 'Save failed',
     deleteConfirm: 'Delete this address?',
+    inviteTitle: 'My invite code',
+    inviteDesc: 'Share this code with friends. When they register and enter it, they become your referral.',
+    inviteCodeLabel: 'Invite code',
+    copyBtn: 'Copy',
+    copied: 'Copied',
+    inviteHint: 'Copy and share via KakaoTalk etc.',
+    uplineLabel: 'Invited by',
+    noUpline: 'Signed up directly',
     changePassword: 'Change Password',
     currentPassword: 'Current',
     newPassword: 'New (6+)',
@@ -2794,6 +2859,14 @@ const en: Dict = {
     orders: 'Orders',
     coupons: 'Coupons',
     customers: 'Customers',
+    referrals: 'Referrals',
+    referralsIntro: 'View each member\'s invite code and upline/downline.',
+    rfSearch: 'Search by name/email/invite code',
+    rfInviteCode: 'Invite code',
+    rfUpline: 'Invited by',
+    rfInvitees: 'Direct invites',
+    rfNoUpline: '—',
+    rfNoInvitees: '0',
     banners: 'Banners',
     seo: 'SEO Settings',
     geo: 'GEO Knowledge Base',
