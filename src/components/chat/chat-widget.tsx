@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { ChatSocket, type ChatMsg, type ChatStatus } from '@/lib/chat-ws';
@@ -159,9 +159,9 @@ export function ChatWidget() {
     }
   }, [open, convId, guest, scrollBottom]);
 
-  // WS 断线兜底：轮询拉取
+  // 面板打开时持续轮询兜底：即使 WS 抖动/丢消息，新消息也会在数秒内出现，无需手动刷新
   useEffect(() => {
-    if (!wsDown || !convId || !guest) return;
+    if (!open || !convId || !guest) return;
     const iv = setInterval(() => {
       getConversation(convId, guest)
         .then((d) => {
@@ -171,9 +171,9 @@ export function ChatWidget() {
           }
         })
         .catch(() => {});
-    }, 4000);
+    }, 3000);
     return () => clearInterval(iv);
-  }, [wsDown, convId, guest]);
+  }, [open, convId, guest]);
 
   async function startConversation() {
     setStarting(true);
@@ -200,17 +200,7 @@ export function ChatWidget() {
   async function send(text: string | null, imageUrl: string | null) {
     if (!convId || !guest) return;
     const clientId = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-    const temp: ChatMsg = {
-      id: 'temp-' + clientId,
-      sender: 'visitor',
-      content: text,
-      imageUrl,
-      read: false,
-      createdAt: new Date().toISOString(),
-      clientId,
-    };
-    setMessages((prev) => [...prev, temp]);
-    scrollBottom();
+    // 不先塞临时消息：以 WS 回显 / REST 返回为准，避免轮询覆盖时产生重复
     if (!socketRef.current?.sendMessage(text, imageUrl, clientId)) {
       try {
         const d = await sendMessageRest({ conversationId: convId, content: text || undefined, imageUrl: imageUrl || undefined, guest });
@@ -243,6 +233,15 @@ export function ChatWidget() {
       setUploading(false);
     }
   }
+
+  // 渲染前严格按发送时间升序排序，保证客服回复与访客提问交错正确
+  const sortedMessages = useMemo(
+    () =>
+      [...messages].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      ),
+    [messages]
+  );
 
   // 后台管理页不渲染站内客服入口
   if (isAdmin) return null;
@@ -338,10 +337,10 @@ export function ChatWidget() {
             <>
               {/* 消息区 */}
               <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-bg">
-                {messages.length === 0 && (
+                {sortedMessages.length === 0 && (
                   <p className="text-xs text-muted text-center mt-6">{t.imStartTitle}</p>
                 )}
-                {messages.map((m) => {
+                {sortedMessages.map((m) => {
                   const mine = m.sender === 'visitor';
                   return (
                     <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>

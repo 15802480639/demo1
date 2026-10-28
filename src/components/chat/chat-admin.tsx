@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { ChatSocket, getSessionCookie, type ChatMsg, type ChatStatus } from '@/lib/chat-ws';
 import {
@@ -204,16 +204,7 @@ export function ChatAdmin() {
   async function send(text: string | null) {
     if (!selectedId) return;
     const clientId = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-    const temp: ChatMsg = {
-      id: 'temp-' + clientId,
-      sender: 'admin',
-      content: text,
-      read: false,
-      createdAt: new Date().toISOString(),
-      clientId,
-    };
-    setMessages((prev) => [...prev, temp]);
-    scrollBottom();
+    // 不先塞临时消息：以 WS 回显 / REST 返回为准，避免轮询覆盖时产生重复
     if (!socketRef.current?.sendMessage(text, null, clientId)) {
       try {
         const d = await sendMessageRest({ conversationId: selectedId, content: text || undefined });
@@ -231,6 +222,17 @@ export function ChatAdmin() {
     send(v);
   }
 
+  // 选中会话后持续轮询兜底：WS 抖动/丢消息也能在数秒内看到新消息
+  useEffect(() => {
+    if (!selectedId) return;
+    const iv = setInterval(() => {
+      getConversation(selectedId)
+        .then((d) => setMessages(d.messages || []))
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [selectedId]);
+
   async function toggleClose() {
     if (!selectedId) return;
     const cur = convs.find((c) => c.id === selectedId);
@@ -245,6 +247,15 @@ export function ChatAdmin() {
 
   const sel = convs.find((c) => c.id === selectedId) || null;
   const totalUnread = convs.reduce((a, c) => a + (c.unreadAdmin || 0), 0);
+
+  // 渲染前严格按发送时间升序排序，保证客服回复与访客提问交错正确
+  const sortedMessages = useMemo(
+    () =>
+      [...messages].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      ),
+    [messages]
+  );
 
   return (
     <div className="space-y-4">
@@ -322,8 +333,8 @@ export function ChatAdmin() {
               <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-bg max-h-[55vh]">
                 {loadingConv ? (
                   <p className="text-xs text-muted text-center mt-6">{t.imRetry}…</p>
-                ) : (
-                  messages.map((m) => {
+                  ) : (
+                  sortedMessages.map((m) => {
                     const mine = m.sender === 'admin';
                     return (
                       <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
