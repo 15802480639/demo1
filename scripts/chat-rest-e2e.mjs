@@ -1,4 +1,5 @@
 // REST 接口 E2E（游客流，无需登录）
+import 'dotenv/config'; // ⚠️ 必须先加载：末尾清理测试数据要用 DATABASE_URL
 const BASE = 'http://127.0.0.1:3000';
 
 async function j(method, path, body, headers = {}) {

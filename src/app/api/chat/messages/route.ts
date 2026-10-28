@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, requireAdmin, HttpError } from '@/lib/auth';
 import { isoUtcSql } from '@/lib/chat-time';
+import { broadcastChatMessage } from '@/lib/chat-broadcast';
 
 // POST /api/chat/messages —— 兜底发送（主路径是 WebSocket，断线时由前端用此接口 + 轮询）
 // 管理员或会话所属访客均可调用。返回落库后的消息。
@@ -97,16 +98,20 @@ export async function POST(req: NextRequest) {
     FROM "ChatMessage" WHERE "id" = ${msg.id}
   `;
 
-  return NextResponse.json({
-    message: {
-      id: msg.id,
-      sender: msg.sender,
-      content: msg.content,
-      imageUrl: msg.imageUrl,
-      read: msg.read,
-      createdAt: row?.createdAt ?? msg.createdAt,
-      clientId: msg.clientId,
-      seq: msg.seq,
-    },
-  });
+  const payload = {
+    id: msg.id,
+    sender: msg.sender,
+    content: msg.content,
+    imageUrl: msg.imageUrl,
+    read: msg.read,
+    createdAt: row?.createdAt ?? msg.createdAt,
+    clientId: msg.clientId,
+    seq: msg.seq,
+  };
+
+  // ⭐ 通知 WS 进程广播：REST 兜底路径的消息也要让对方秒到，
+  //    否则对方只能靠 3 秒轮询才看见（表现为"不实时"）。
+  await broadcastChatMessage(conversationId, payload);
+
+  return NextResponse.json({ message: payload });
 }

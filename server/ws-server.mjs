@@ -19,6 +19,10 @@ const { Pool } = pg;
 const PORT = Number(process.env.CHAT_WS_PORT || 4000);
 const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-insecure-secret-change-me';
 const DATABASE_URL = process.env.DATABASE_URL;
+// Next 端的会话 cookie 名（必须与 src/lib/auth.ts 的 SESSION_COOKIE 一致）
+const SESSION_COOKIE = 'ws_session';
+// LISTEN/NOTIFY 频道：Next 进程（REST 兜底落库）用它通知本进程广播
+const NOTIFY_CHANNEL = 'chat_broadcast';
 
 if (!DATABASE_URL) {
   console.error('[chat-ws] 缺少 DATABASE_URL，无法启动');
@@ -28,18 +32,54 @@ if (!DATABASE_URL) {
 const pool = new Pool({ connectionString: DATABASE_URL });
 
 // ---------- 鉴权：复用 Next auth.ts 的 HMAC-SHA256 无状态 token 校验 ----------
+/** 定长比较，避免时序侧信道 */
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
+/**
+ * 校验后台会话令牌。兼容两种来源：
+ *  1) Cookie 里的 ws_session（握手时由浏览器自动带上，HttpOnly 也无所谓）
+ *  2) /api/chat/ws-token 换来的短时令牌（Cookie 没被代理转发时的兜底）
+ * 两者同为 AUTH_SECRET 签名、payload 含 id 且 role === 'admin'。
+ */
 function verifyAdminToken(token) {
   if (!token || typeof token !== 'string' || !token.includes('.')) return null;
   const [payload, sig] = token.split('.');
   const expected = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('base64url');
-  if (expected !== sig) return null;
+  if (!safeEqual(expected, sig)) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
     if (!data.id) return null;
+    if (data.role !== 'admin') return null;
+    // 短时令牌带 exp；cookie 会话令牌没有 exp
+    if (data.exp && Date.now() > Number(data.exp)) return null;
     return data; // { id, role, ... }
   } catch {
     return null;
   }
+}
+
+/** 解析请求头 Cookie: "a=1; ws_session=xxx" */
+function parseCookies(header) {
+  const out = {};
+  if (!header) return out;
+  for (const part of String(header).split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0) continue;
+    const k = part.slice(0, idx).trim();
+    if (!k) continue;
+    const v = part.slice(idx + 1).trim();
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 // ---------- 连接状态 ----------
@@ -161,25 +201,112 @@ async function markRead(conversationId, senderSide) {
   );
 }
 
-// ---------- HTTP（健康检查）+ WS ----------
+// ---------- HTTP（健康检查 + 内部广播）+ WS ----------
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, admins: adminSockets.size, visitors: visitorSockets.size }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        admins: adminSockets.size,
+        visitors: visitorSockets.size,
+        conversations: visitorSockets.size,
+      })
+    );
     return;
   }
+
+  // 内部广播：Next 端 REST 兜底落库后调用，让本进程把消息实时推给客服/访客。
+  // 仅本机可访问（生产由 Nginx 只反代 /ws，不暴露此路径），且需携带内部密钥。
+  if (req.url === '/internal/broadcast' && req.method === 'POST') {
+    const secret = req.headers['x-internal-secret'];
+    if (!secret || !safeEqual(String(secret), AUTH_SECRET)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'FORBIDDEN' }));
+      return;
+    }
+    let raw = '';
+    req.on('data', (c) => {
+      raw += c;
+      if (raw.length > 256 * 1024) req.destroy();
+    });
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(raw || '{}');
+        const conversationId = String(body.conversationId || '');
+        const message = body.message || null;
+        if (!conversationId || !message) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'BAD_REQUEST' }));
+          return;
+        }
+        broadcastMessage(conversationId, message);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'BAD_JSON' }));
+      }
+    });
+    return;
+  }
+
   res.writeHead(426, { 'Content-Type': 'text/plain' });
   res.end('Upgrade Required');
 });
 
+/** 把一条已落库的消息广播给所有客服 + 该会话访客，并同步会话列表未读数 */
+async function broadcastMessage(conversationId, message) {
+  const envelope = { type: 'message', conversationId, message };
+  broadcastToAdmins(envelope);
+  broadcastToVisitors(conversationId, envelope);
+  try {
+    const unreadAdmin = await countUnreadAdmin(conversationId);
+    broadcastToAdmins({
+      type: 'convUpdate',
+      conversationId,
+      unreadAdmin,
+      lastMessageAt: message.createdAt,
+      lastSender: message.sender,
+      lastPreview: message.content || (message.imageUrl ? '[image]' : ''),
+    });
+  } catch {
+    /* 统计失败不影响消息推送 */
+  }
+}
+
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   ws.isAlive = true;
-  ws.meta = { authed: false, role: null, conversationId: null, guestToken: null, userId: null };
+  ws.meta = {
+    authed: false,
+    role: null,
+    conversationId: null,
+    guestToken: null,
+    userId: null,
+    // 握手阶段从 Cookie 解析出的后台身份（尚未决定角色）
+    cookieAdminUser: null,
+  };
   ws.on('pong', () => {
     ws.isAlive = true;
   });
+
+  // ⭐ 握手阶段解析 Cookie 里的 ws_session 并预先验签。
+  //    之前后台连不上就是因为 ws_session 是 HttpOnly，前端 JS 读不到，
+  //    只能靠升级请求自动带上的 Cookie 来认身份（Cookie 不区分端口，天然可用）。
+  //    注意：这里只"备好"身份，不直接认定角色 ——
+  //    否则登录了 admin 的浏览器打开前台时，访客连接会被误当成客服连接。
+  try {
+    const cookies = parseCookies(req?.headers?.cookie);
+    const token = cookies[SESSION_COOKIE];
+    if (token) {
+      const user = verifyAdminToken(token);
+      if (user) ws.meta.cookieAdminUser = user;
+    }
+  } catch {
+    /* 忽略 cookie 解析异常，走后续 auth 消息鉴权 */
+  }
 
   ws.on('message', async (raw) => {
     let msg;
@@ -198,13 +325,15 @@ wss.on('connection', (ws) => {
         return;
       }
       if (msg.role === 'admin') {
-        const user = verifyAdminToken(msg.token);
+        // ⚠️ token 优先取 auth 消息里的（前端拿不到 HttpOnly cookie 时会是空串），
+        //    空串则回退到握手阶段从 Cookie 解析出的身份。
+        const user = verifyAdminToken(msg.token) || ws.meta.cookieAdminUser || null;
         if (!user || user.role !== 'admin') {
           send(ws, { type: 'error', message: 'FORBIDDEN' });
           ws.close();
           return;
         }
-        ws.meta = { authed: true, role: 'admin', userId: user.id };
+        ws.meta = { ...ws.meta, authed: true, role: 'admin', userId: user.id };
         adminSockets.add(ws);
         send(ws, { type: 'authed', role: 'admin' });
         return;
@@ -289,7 +418,6 @@ wss.on('connection', (ws) => {
         });
         return;
       }
-
       if (msg.type === 'read') {
         let conversationId = ws.meta.role === 'visitor' ? ws.meta.conversationId : msg.conversationId;
         if (!conversationId) return;

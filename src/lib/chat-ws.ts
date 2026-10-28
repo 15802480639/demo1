@@ -28,11 +28,27 @@ export function getWsUrl(): string {
   return `${wsProto}://${window.location.host}/ws`;
 }
 
-/** 读取 Next 的会话 cookie，供 admin WS 鉴权 */
+/** 读取 Next 的会话 cookie，供 admin WS 鉴权（注意：ws_session 是 HttpOnly，这里通常读不到） */
 export function getSessionCookie(): string {
   if (typeof document === 'undefined') return '';
   const m = document.cookie.match(/(?:^|;\s*)ws_session=([^;]+)/);
   return m ? decodeURIComponent(m[1]) : '';
+}
+
+/**
+ * 取一次性 WS 鉴权令牌（后台专用）。
+ * ws_session 是 HttpOnly → 前端读不到 → 必须由服务端签发短时令牌。
+ * 失败返回空串（服务端还有 Cookie 握手鉴权兜底）。
+ */
+export async function fetchWsToken(): Promise<string> {
+  try {
+    const res = await fetch('/api/chat/ws-token', { cache: 'no-store' });
+    if (!res.ok) return '';
+    const d = await res.json();
+    return typeof d.token === 'string' ? d.token : '';
+  } catch {
+    return '';
+  }
 }
 
 export type ChatStatus = 'connecting' | 'open' | 'closed' | 'reconnecting';
@@ -51,6 +67,10 @@ export class ChatSocket {
   /** clientId -> 等待回执的超时定时器 */
   private pendingAcks = new Map<string, any>();
 
+  /**
+   * @param role 角色
+   * @param auth 鉴权载荷；也可以传一个返回载荷的函数/Promise（admin 需要先取短时令牌）
+   */
   constructor(role: 'admin' | 'visitor', auth: any) {
     this.role = role;
     this.auth = auth;
@@ -68,7 +88,15 @@ export class ChatSocket {
     this.open();
   }
 
-  private open() {
+  /** 解析鉴权载荷（支持函数 / Promise，同步载荷直接返回） */
+  private async resolveAuth(): Promise<any> {
+    const a = this.auth;
+    if (typeof a === 'function') return (await a()) || {};
+    if (a && typeof a.then === 'function') return (await a) || {};
+    return a || {};
+  }
+
+  private async open() {
     if (typeof window === 'undefined') return;
     this.setStatus(this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting');
     let ws: WebSocket;
@@ -79,10 +107,13 @@ export class ChatSocket {
       return;
     }
     this.ws = ws;
-    ws.onopen = () => {
+    ws.onopen = async () => {
       this.reconnectAttempts = 0;
       this.setStatus('open');
-      ws.send(JSON.stringify({ type: 'auth', role: this.role, ...this.auth }));
+      // 鉴权载荷可能是异步的（admin 要先取短时令牌）
+      const auth = await this.resolveAuth();
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: 'auth', role: this.role, ...auth }));
     };
     ws.onmessage = (ev) => {
       try {

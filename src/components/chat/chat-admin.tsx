@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocale } from '@/components/i18n/locale-provider';
-import { ChatSocket, getSessionCookie, type ChatMsg, type ChatStatus } from '@/lib/chat-ws';
+import { ChatSocket, fetchWsToken, type ChatMsg, type ChatStatus } from '@/lib/chat-ws';
 import {
   listConversations,
   getConversation,
@@ -120,11 +120,22 @@ export function ChatAdmin() {
   const refreshList = useCallback(async () => {
     try {
       const d = await listConversations();
-      setConvs(
-        (d.conversations || []).sort(
-          (a: Conv, b: Conv) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
-        )
+      const list = (d.conversations || []).sort(
+        (a: Conv, b: Conv) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
       );
+      const cur = selectedRef.current;
+      setConvs((prev) => {
+        // 保留本地已知的会话（服务端列表按 lastMessageAt 排序，若本地有会话还没同步上去，
+        // 不能直接丢掉），并用服务端未读数覆盖。
+        const known = new Map(prev.map((c) => [c.id, c]));
+        return list.map((c) => {
+          const old = known.get(c.id);
+          const merged = old ? { ...old, ...c } : c;
+          // ⚠️ 竞态兜底：客服正在看的会话，未读数一律按 0 显示。
+          //    否则 markRead 落库前的那一次轮询会把旧未读数又刷回来（红点反复出现）。
+          return cur && merged.id === cur ? { ...merged, unreadAdmin: 0 } : merged;
+        });
+      });
     } catch {
       /* noop */
     }
@@ -133,27 +144,42 @@ export function ChatAdmin() {
   // 初始化：拉列表 + 建 WS
   useEffect(() => {
     refreshList();
-    const sock = new ChatSocket('admin', { token: getSessionCookie() });
+    // ⚠️ admin 鉴权：ws_session 是 HttpOnly，前端 document.cookie 读不到，
+    //    必须由服务端签发短时令牌（/api/chat/ws-token）。
+    //    服务端还有「握手阶段解析 Cookie」作为第二重兜底。
+    const sock = new ChatSocket('admin', async () => ({ token: await fetchWsToken() }));
     socketRef.current = sock;
 
     sock.on('authed', () => setConn('open'));
     sock.on('status', (s: ChatStatus) => setConn(s));
 
     sock.on('convUpdate', (ev: any) => {
+      // ⚠️ 注意：不要在 setConvs 的更新函数里调 refreshList（副作用 + 严格模式会重复执行）
+      setConvs((prev) => {
+        const idx = prev.findIndex((c) => c.id === ev.conversationId);
+        if (idx < 0) return prev;
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          // ⚠️ 客服正在看的会话不累计未读（消息已实时显示在面板里），
+          //    否则红点会跟着每条新消息跳动，体验上等于"未读清不掉"。
+          unreadAdmin: selectedRef.current === ev.conversationId ? 0 : (ev.unreadAdmin ?? 0),
+          lastPreview: ev.lastPreview,
+          lastSender: ev.lastSender,
+          lastMessageAt: ev.lastMessageAt,
+        };
+        return next.sort(
+          (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+        );
+      });
+    });
+
+    // 客服读过的会话 → 未读数归零（服务端回推）
+    sock.on('read', (ev: any) => {
       setConvs((prev) =>
-        prev
-          .map((c) =>
-            c.id === ev.conversationId
-              ? {
-                  ...c,
-                  unreadAdmin: ev.unreadAdmin,
-                  lastPreview: ev.lastPreview,
-                  lastSender: ev.lastSender,
-                  lastMessageAt: ev.lastMessageAt,
-                }
-              : c
-          )
-          .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
+        prev.map((c) =>
+          c.id === ev.conversationId ? { ...c, unreadAdmin: ev.unreadAdmin ?? 0 } : c
+        )
       );
     });
 
@@ -181,6 +207,16 @@ export function ChatAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ⭐ 会话列表轮询兜底：WS 断线/未鉴权/消息经 REST 兜底时，
+  //    新会话与新消息也必须能在几秒内出现在列表里（此前只在 mount 加载一次）。
+  useEffect(() => {
+    refreshList();
+    const iv = setInterval(() => {
+      refreshList();
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [refreshList]);
+
   function requestNotify(body: string, conversationId: string) {
     try {
       if (typeof Notification === 'undefined') return;
@@ -199,11 +235,14 @@ export function ChatAdmin() {
 
   async function selectConv(id: string) {
     setSelectedId(id);
+    // ⭐ 本地立刻清红点：不等服务端回推（否则界面会一直挂着旧的未读数）。
+    //    服务端 markRead 成功后还会再广播一次 read 事件做最终对齐。
+    setConvs((prev) => prev.map((c) => (c.id === id ? { ...c, unreadAdmin: 0 } : c)));
     setLoadingConv(true);
     try {
       const d = await getConversation(id);
       setMessages(d.messages || []);
-      markRead(id).catch(() => {});
+      await markRead(id).catch(() => {});
       socketRef.current?.sendRead(id);
     } catch {
       /* noop */

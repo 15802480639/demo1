@@ -6,13 +6,26 @@ import WebSocket from 'ws';
 
 const BASE = 'http://127.0.0.1:3000';
 const WS_URL = 'ws://127.0.0.1:4000';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 
-if (!ADMIN_TOKEN) { console.log('缺少 ADMIN_TOKEN'); process.exit(1); }
-console.log('start, token len', ADMIN_TOKEN.length);
-
-// 禁用代理，避免 127.0.0.1 被代理拦截
+// ⚠️ 禁用代理，避免 127.0.0.1 被代理拦截
 for (const k of ['HTTP_PROXY','HTTPS_PROXY','http_proxy','https_proxy','ALL_PROXY','all_proxy']) delete process.env[k];
+
+/** 自动登录取 admin 会话 token（免去手动配 ADMIN_TOKEN 环境变量） */
+async function loginAdmin() {
+  const r = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account: 'admin@shop.com', password: 'admin1234' }),
+  });
+  const sc = r.headers.get('set-cookie') || '';
+  const m = sc.match(/(?:^|; )ws_session=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || (await loginAdmin());
+
+if (!ADMIN_TOKEN) { console.log('缺少 ADMIN_TOKEN（自动登录也失败）'); process.exit(1); }
+console.log('start, token len', ADMIN_TOKEN.length);
 
 function open(url) {
   return new Promise((res, rej) => {
@@ -73,3 +86,7 @@ await pool.query(`DELETE FROM "ChatMessage" WHERE "conversationId"=$1`, [id]);
 await pool.query(`DELETE FROM "ChatConversation" WHERE "id"=$1`, [id]);
 await pool.end();
 console.log('清理完成 ✅ 全链路实时通过');
+
+// ⚠️ 必须显式退出：WS 连接会吊住事件循环，脚本跑完也不结束
+try { adminWs.close(); visitorWs.close(); } catch { /* noop */ }
+process.exit(0);
