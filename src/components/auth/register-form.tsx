@@ -1,13 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from '@/components/i18n/locale-provider';
 
 export function RegisterForm({ redirectTo }: { redirectTo: string }) {
   const { locale, dict } = useLocale();
-  const router = useRouter();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,8 +44,10 @@ export function RegisterForm({ redirectTo }: { redirectTo: string }) {
         setErr(errMsg(data.error));
         return;
       }
-      router.push(redirectTo);
-      router.refresh();
+      // 🔴 必须整页跳转：router.push+refresh 存在竞态，
+      // 会复用缓存里 session=null 的 layout，导致 header 仍显示「注册/登录」。
+      // 硬导航强制 SSR 重新读 cookie（与登录表单同一处理）。
+      window.location.assign(redirectTo);
     } catch {
       setErr(dict.auth.errServerError);
     } finally {

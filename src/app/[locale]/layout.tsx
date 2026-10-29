@@ -172,7 +172,13 @@ export default async function LocaleLayout({
         <AuthProvider
           user={
             session
-              ? { id: session.id, name: session.name, email: session.email, role: session.role }
+              ? {
+                  id: session.id,
+                  username: session.username,
+                  name: session.name,
+                  email: session.email,
+                  role: session.role,
+                }
               : null
           }
         >

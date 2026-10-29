@@ -10,6 +10,7 @@
 //   ⑦ 停用账号后立即无法登录
 //   ⑧ CS 会话令牌不能当 ws_session 用（跨体系令牌重放）
 import 'dotenv/config';
+import { loginTestCustomer } from './chat-test-user.mjs';
 import crypto from 'crypto';
 import { createRequire } from 'module';
 import pg from 'pg';
@@ -110,17 +111,21 @@ function openWs(authMsg, headers = {}) {
   });
 }
 
-/** 建一个访客会话并发一条消息 */
+/**
+ * 建一个访客会话并发一条消息
+ * ⚠️ 访客必须已登录才能建会话（2026-10-29 起）
+ */
+let custCookie = '';
 async function createVisitorConversation(content) {
   const r = await fetch(`${BASE}/api/chat/conversations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ visitorName: '回归访客', contactType: 'email', contact: 't@t.com', locale: 'zh' }),
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
+    body: JSON.stringify({ contactType: 'email', contact: 't@t.com', locale: 'zh' }),
   });
   const conv = await r.json();
   const cr = await fetch(`${BASE}/api/chat/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({ conversationId: conv.id, guest: conv.guestToken, content }),
   });
   const msg = await cr.json();
@@ -135,6 +140,11 @@ async function main() {
   const pwd = 'regress123';
 
   console.log('=== 客服 H5 回归测试 ===\n');
+
+  // ⚠️ 访客必须已登录（2026-10-29 起）
+  const cust = await loginTestCustomer('im');
+  custCookie = cust.cookie;
+  check('⓪ 访客登录成功', !!custCookie);
 
   // ---------- ① 后台建号 ----------
   const admin = await loginAdmin();
@@ -298,7 +308,8 @@ async function main() {
   // ---------- ⑥ 访客实时收到客服回复 ----------
   const visitor = await openWs(
     { type: 'auth', role: 'visitor', conversationId: convId, guestToken },
-    {}
+    // ⚠️ 访客会话已绑定 userId → WS 握手必须带登录 cookie
+    { Cookie: `ws_session=${custCookie}` }
   );
   let visitorGot = null;
   visitor.on('message', (d) => {
@@ -336,7 +347,8 @@ async function main() {
   });
   await fetch(`${BASE}/api/chat/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // ⚠️ 访客消息必须带登录 cookie（会话已绑定 userId）
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({ conversationId: convId, guest: guestToken, content: '访客第二条', clientId: 'cs-v2' }),
   });
   await sleep(1500);

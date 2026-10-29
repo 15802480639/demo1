@@ -9,6 +9,7 @@
 //   ⑥ 非法 productSlug（注入/超长/特殊字符）→ 被规整，不污染库
 //   ⑦ 客服与访客互相看到对方发的商品引用
 import 'dotenv/config';
+import { loginTestCustomer } from './chat-test-user.mjs';
 import { createRequire } from 'module';
 import pg from 'pg';
 
@@ -37,7 +38,7 @@ function getCookie(setCookie, name) {
 async function loginAdmin() {
   const r = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({ account: 'admin@shop.com', password: 'admin1234' }),
   });
   return getCookie(r.headers.get('set-cookie'), 'ws_session');
@@ -53,10 +54,15 @@ async function pickProduct() {
 let convId = null;
 let guest = null;
 const clientIds = [];
+// ⚠️ 访客必须已登录（2026-10-29 起）→ 所有访客侧请求都要带 cookie
+let custCookie = '';
 
 async function main() {
   const adminCookie = await loginAdmin();
   check('①0 管理员登录', !!adminCookie);
+  const cust = await loginTestCustomer('im');
+  custCookie = cust.cookie;
+  check('①0B 访客登录', !!custCookie);
 
   // ---------- ① 商品卡片接口 ----------
   const prod = await pickProduct();
@@ -76,10 +82,11 @@ async function main() {
   }
 
   // ---------- 建访客会话 ----------
+  // ⚠️ 访客必须已登录才能建会话（2026-10-29 起）
   const cr = await fetch(`${BASE}/api/chat/conversations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ visitorName: '商品测试访客', contactType: 'none', locale: 'zh' }),
+    headers: { 'Content-Type': 'application/json', ...(custCookie ? { Cookie: `ws_session=${custCookie}` } : {}) },
+    body: JSON.stringify({ contactType: 'none', locale: 'zh' }),
   });
   const cd = await cr.json();
   convId = cd.id;
@@ -91,7 +98,7 @@ async function main() {
   clientIds.push(cid1);
   const mr = await fetch(`${BASE}/api/chat/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({
       conversationId: convId,
       content: '这个有货吗？',
@@ -105,7 +112,9 @@ async function main() {
   check('③B 回执带 productSlug', md.message?.productSlug === prod.slug, String(md.message?.productSlug));
 
   // 历史接口
-  const hr = await fetch(`${BASE}/api/chat/conversations/${convId}?guest=${encodeURIComponent(guest)}`);
+  const hr = await fetch(`${BASE}/api/chat/conversations/${convId}?guest=${encodeURIComponent(guest)}`, {
+    headers: { Cookie: `ws_session=${custCookie}` },
+  });
   const hd = await hr.json();
   const withProd = (hd.messages || []).filter((m) => m.productSlug === prod.slug);
   check('③C 历史消息带 productSlug', withProd.length === 1, `${withProd.length} 条`);
@@ -113,7 +122,7 @@ async function main() {
   // ---------- ④ 幂等 ----------
   const mr2 = await fetch(`${BASE}/api/chat/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({
       conversationId: convId,
       content: '这个有货吗？',
@@ -124,7 +133,9 @@ async function main() {
   });
   const md2 = await mr2.json();
   check('④A 重复提交返回 duplicate', md2.duplicate === true, String(md2.duplicate));
-  const hr2 = await fetch(`${BASE}/api/chat/conversations/${convId}?guest=${encodeURIComponent(guest)}`);
+  const hr2 = await fetch(`${BASE}/api/chat/conversations/${convId}?guest=${encodeURIComponent(guest)}`, {
+    headers: { Cookie: `ws_session=${custCookie}` },
+  });
   const hd2 = await hr2.json();
   const cnt = (hd2.messages || []).filter((m) => m.clientId === cid1).length;
   check('④B 同 clientId 只落一条', cnt === 1, `实际 ${cnt} 条`);
@@ -135,7 +146,7 @@ async function main() {
   clientIds.push(cidPure);
   await fetch(`${BASE}/api/chat/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({
       conversationId: convId,
       guest,
@@ -154,7 +165,7 @@ async function main() {
   clientIds.push(cidTxt);
   await fetch(`${BASE}/api/chat/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({
       conversationId: convId,
       content: '这件还有别的颜色吗',
@@ -177,7 +188,7 @@ async function main() {
   clientIds.push(cidBad);
   const br = await fetch(`${BASE}/api/chat/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({
       conversationId: convId,
       content: '恶意 slug',
@@ -189,14 +200,16 @@ async function main() {
   const bd = await br.json();
   const stored = bd.message?.productSlug ?? '';
   check('⑥A 非法 slug 被规整为安全字符', typeof stored === 'string' && !/['";\s]/.test(stored), JSON.stringify(stored));
-  const hrBad = await fetch(`${BASE}/api/chat/conversations/${convId}?guest=${encodeURIComponent(guest)}`);
+  const hrBad = await fetch(`${BASE}/api/chat/conversations/${convId}?guest=${encodeURIComponent(guest)}`, {
+    headers: { Cookie: `ws_session=${custCookie}` },
+  });
   const hdBad = await hrBad.json();
   check('⑥B 表未受影响，历史仍可读', Array.isArray(hdBad.messages), `${hdBad.messages?.length} 条`);
 
   // ---------- ⑦ 客服端能收到商品引用 ----------
   const cr2 = await fetch(`${BASE}/api/chat/conversations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${custCookie}` },
     body: JSON.stringify({ visitorName: '客服回复访客', contactType: 'none', locale: 'zh' }),
   });
   const cd2 = await cr2.json();

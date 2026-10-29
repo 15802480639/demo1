@@ -11,6 +11,7 @@
 //   ⑧ 未读数按客服独立：A 读过的会话，B 仍显示未读；A 自己不再显示
 //   ⑨ 停用账号后无法登录
 import { createRequire } from 'module';
+import { loginTestCustomer } from './chat-test-user.mjs';
 import fs from 'fs';
 import path from 'path';
 
@@ -53,8 +54,16 @@ async function firstRowBadge(page) {
 async function main() {
   const browser = await chromium.launch({ headless: true, executablePath: CHROME });
 
+  // ⚠️ 截图会卡在 "waiting for fonts to load" —— 外网 Google Fonts 走本机代理时
+  //    经常挂住不放，导致 Playwright 截图超时、整个套件崩在截图那一步。
+  //    解决：直接拦掉字体请求（字体加载立刻失败 → settled），截图本身再加超时兜底。
+  const blockFonts = (ctx) => {
+    ctx.route(/fonts\.(googleapis|gstatic)\.com/i, (route) => route.abort().catch(() => {}));
+  };
+
   // 客服 A：手机视口
   const csCtx = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true });
+  blockFonts(csCtx);
   const cs = await csCtx.newPage();
   const csErrors = [];
   cs.on('console', (m) => {
@@ -63,25 +72,31 @@ async function main() {
 
   // 客服 B：独立 context（若共用，A 的 cs_session cookie 会让 B 顶替成 A）
   const csBCtx = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true });
+  blockFonts(csBCtx);
   const csB = await csBCtx.newPage();
 
   // 停用测试：再开一个独立 context
   const csCCtx = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true });
+  blockFonts(csCCtx);
   const csC = await csCCtx.newPage();
 
   // 后台端：桌面视口
   const adminCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  blockFonts(adminCtx);
   const admin = await adminCtx.newPage();
 
   // 访客端
   const visitorCtx = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true });
+  blockFonts(visitorCtx);
   const visitor = await visitorCtx.newPage();
 
   const stamp = Date.now();
   const ua = `uia_${stamp}`;
   const ub = `uib_${stamp}`;
   const pwd = 'uitest123';
-  const VISITOR_NAME = `UI访客${String(stamp).slice(-5)}`;
+  // ⚠️ 访客必须已注册登录才能用实时客服（2026-10-29 起）
+  const cust = await loginTestCustomer('im');
+  const VISITOR_NAME = cust.username;
 
   try {
     // ---------- ① 路由与布局 ----------
@@ -96,10 +111,10 @@ async function main() {
     const hit = mallMarks.filter((m) => html.includes(m));
     check(
       '①C 纯净全屏：不继承商城顶栏',
-      hit.length === 0 && html.includes('客服工作台'),
+      hit.length === 0 && html.includes('상담원 작업대'),
       hit.length ? '命中商城标记: ' + hit.join(',') : '无商城标记，且含 H5 标题'
     );
-    await cs.screenshot({ path: path.join(OUT, '01-login.png') });
+    await cs.screenshot({ path: path.join(OUT, '01-login.png'), timeout: 15000 }).catch(() => {});
 
     // ---------- ③ 后台创建账号 ----------
     await admin.goto(`${BASE}/ko/admin/login`, { waitUntil: 'domcontentloaded' });
@@ -131,7 +146,8 @@ async function main() {
     await admin.waitForTimeout(2000);
     const adminHtml = await admin.content();
     check('③B 后台客服账号管理页可打开', adminHtml.includes(ua) && adminHtml.includes(ub));
-    await admin.screenshot({ path: path.join(OUT, '02-admin-agents.png'), fullPage: true });
+    // ⚠️ 不用 fullPage：账号列表变长后 fullPage 截图会卡在等字体加载上
+    await admin.screenshot({ path: path.join(OUT, '02-admin-agents.png'), timeout: 15000 }).catch(() => {});
 
     // ---------- ③C H5 登录 ----------
     await cs.goto(`${BASE}/cs/login`, { waitUntil: 'domcontentloaded' });
@@ -148,7 +164,7 @@ async function main() {
     const connOk = await cs
       .locator('header')
       .first()
-      .getByText('已连接')
+      .getByText('연결됨')
       .waitFor({ timeout: 25000 })
       .then(() => true)
       .catch(() => false);
@@ -156,22 +172,21 @@ async function main() {
     check('④ 顶部显示已连接', connOk, headerText.replace(/\n/g, ' '));
 
     // ---------- ⑤ 访客发消息 → H5 列表出现 ----------
+    // ⚠️ 先登录（注册走 API，cookie 落到浏览器上下文），再用 ?chat=1 自动打开浮窗
     await visitor.goto(`${BASE}/zh`, { waitUntil: 'domcontentloaded' });
+    await visitor.evaluate(
+      async ({ account, password }) => {
+        await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account, password }),
+        });
+      },
+      { account: cust.username, password: cust.password }
+    );
+    await visitor.goto(`${BASE}/zh?chat=1`, { waitUntil: 'domcontentloaded' });
     await visitor.waitForTimeout(2500);
-    const widgetBtn = visitor
-      .locator('button[aria-label="实时客服"], button[aria-label="실시간 상담"]')
-      .first();
-    await widgetBtn.click();
-    await visitor.waitForTimeout(1500);
-    // 若弹出留资表单，先填昵称再开始
-    const nameInput = visitor
-      .locator(
-        'input[placeholder*="称呼"], input[placeholder*="昵称"], input[placeholder*="이름"], input[placeholder*="Name"]'
-      )
-      .first();
-    if (await nameInput.count()) {
-      await nameInput.fill(VISITOR_NAME);
-    }
+    // 未登录会看到「登录/注册」引导；登录后应直接看到「开始对话」
     const startBtn = visitor.locator('button', { hasText: '开始对话' }).first();
     if (await startBtn.count()) {
       await startBtn.click();
@@ -193,19 +208,20 @@ async function main() {
 
     const badgeCount = await firstRowBadge(cs);
     check('⑤B 未读红点出现', badgeCount > 0, `当前会话 ${badgeCount} 个红点`);
-    await cs.screenshot({ path: path.join(OUT, '03-list-unread.png') });
+    await cs.screenshot({ path: path.join(OUT, '03-list-unread.png'), timeout: 15000 }).catch(() => {});
 
     // ---------- ⑥ 点开会话 → 红点归零 ----------
     await cs.locator('main button').first().click();
     await cs.waitForTimeout(2500);
     const chatText = await cs.locator('body').innerText().catch(() => '');
     check('⑥B 聊天页显示访客消息', chatText.includes('H5测试'), chatText.slice(0, 100).replace(/\n/g, ' | '));
-    await cs.screenshot({ path: path.join(OUT, '04-chat-view.png') });
+    await cs.screenshot({ path: path.join(OUT, '04-chat-view.png'), timeout: 15000 }).catch(() => {});
 
     // ---------- ⑦ H5 回复 → 访客免刷新收到 ----------
     const csTa = cs.locator('textarea').first();
     await csTa.fill('有货的，今天下单明天发货');
-    await cs.locator('button', { hasText: '发送' }).first().click();
+    // ⚠️ H5 客服台已韩文化 → 发送按钮是「전송」
+    await cs.locator('button', { hasText: '전송' }).first().click();
     await cs.waitForTimeout(3000);
 
     const visitorText = await visitor.locator('body').innerText().catch(() => '');
@@ -214,7 +230,7 @@ async function main() {
       visitorText.includes('有货的，今天下单明天发货'),
       visitorText.slice(0, 120).replace(/\n/g, ' | ')
     );
-    await visitor.screenshot({ path: path.join(OUT, '05-visitor-got-reply.png') });
+    await visitor.screenshot({ path: path.join(OUT, '05-visitor-got-reply.png'), timeout: 15000 }).catch(() => {});
 
     // ---------- ⑧ 未读按客服独立 ----------
     // 客服 B 登录（独立 context），B 从未看过这个会话 → 应有未读
@@ -231,7 +247,7 @@ async function main() {
     check('⑧A 客服 B 从未读过 → 有未读红点', badgeB > 0, `B 当前会话 ${badgeB} 个红点`);
 
     // 客服 A 已读过该会话 → 返回列表应无红点（B 的未读不受影响）
-    await cs.locator('button[aria-label="返回会话列表"]').first().click();
+    await cs.locator('button[aria-label="목록으로"]').first().click();
     await cs.waitForTimeout(2500);
     const badgeA = await firstRowBadge(cs);
     const badgeB2 = await firstRowBadge(csB);
@@ -241,7 +257,7 @@ async function main() {
       badgeB2 > 0 && badgeB2 === badgeB,
       `B 之前=${badgeB} 现在=${badgeB2}`
     );
-    await csB.screenshot({ path: path.join(OUT, '06-agent-b-unread.png') });
+    await csB.screenshot({ path: path.join(OUT, '06-agent-b-unread.png'), timeout: 15000 }).catch(() => {});
 
     // ---------- ⑨ 停用后无法登录 ----------
     await admin.evaluate(
@@ -261,8 +277,9 @@ async function main() {
     await csC.locator('button[type="submit"]').first().click();
     await csC.waitForTimeout(2000);
     const errText = await csC.locator('body').innerText().catch(() => '');
-    check('⑨ 停用账号登录被拒绝并提示', errText.includes('停用'), errText.slice(0, 80).replace(/\n/g, ' '));
-    await csC.screenshot({ path: path.join(OUT, '07-disabled-login.png') });
+    // ⚠️ H5 客服台已韩文化 → 提示是韩文「사용 중지된」
+    check('⑨ 停用账号登录被拒绝并提示', /사용 중지된/.test(errText), errText.slice(0, 80).replace(/\n/g, ' '));
+    await csC.screenshot({ path: path.join(OUT, '07-disabled-login.png'), timeout: 15000 }).catch(() => {});
 
     // ---------- 控制台无报错 ----------
     const realErrors = csErrors.filter(
@@ -277,6 +294,12 @@ async function main() {
       await pool.query(`DELETE FROM "ChatConversation" WHERE "visitorName" = $1`, [VISITOR_NAME]);
       await pool.query(`DELETE FROM "ChatReadCursor" WHERE "staffId" LIKE 'agent:%'`);
       await pool.query(`DELETE FROM "ChatAgent" WHERE "username" IN ($1,$2)`, [ua, ub]);
+      // 清理测试会员（含其会话）
+      await pool.query(
+        `DELETE FROM "ChatConversation" WHERE "userId" IN (SELECT "id" FROM "User" WHERE "username" = $1)`,
+        [VISITOR_NAME]
+      );
+      await pool.query(`DELETE FROM "User" WHERE "username" = $1`, [VISITOR_NAME]);
       await pool.end();
     } catch {
       /* noop */

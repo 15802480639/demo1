@@ -12,6 +12,7 @@ import {
   uploadImage,
 } from '@/lib/chat-api';
 import { ChatProductCard } from '@/components/chat/chat-product-card';
+import { csDict } from '@/lib/cs-dict';
 
 // H5 客服工作台 —— 手机单栏版
 //
@@ -20,6 +21,7 @@ import { ChatProductCard } from '@/components/chat/chat-product-card';
 //   · 提醒用「声音 + 振动」而非桌面通知（iOS Safari 不支持 Notification API）
 //   · 输入框吸底，适配移动端键盘弹起
 //   · 未读数按当前客服各自的游标计算（后端 ChatReadCursor）
+//   · 界面固定韩文（客服团队为韩国人），文案见 src/lib/cs-dict.ts
 type Conv = {
   id: string;
   visitorName: string | null;
@@ -36,7 +38,7 @@ type Conv = {
 
 function fmtTime(s: string) {
   try {
-    return new Date(s).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    return new Date(s).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '';
   }
@@ -46,24 +48,24 @@ function fromNow(s: string) {
   try {
     const diff = Date.now() - new Date(s).getTime();
     const m = Math.floor(diff / 60000);
-    if (m < 1) return '刚刚';
-    if (m < 60) return `${m} 分钟前`;
+    if (m < 1) return csDict.justNow;
+    if (m < 60) return `${m}${csDict.minutesAgo}`;
     const h = Math.floor(m / 60);
-    if (h < 24) return `${h} 小时前`;
-    return `${Math.floor(h / 24)} 天前`;
+    if (h < 24) return `${h}${csDict.hoursAgo}`;
+    return `${Math.floor(h / 24)}${csDict.daysAgo}`;
   } catch {
     return '';
   }
 }
 
-/** 访客显示名：昵称 → 账户名 → 邮箱 → 访客 */
+/** 访客显示名：注册账号名优先（子建要求）→ 昵称 → 邮箱 → 访客 */
 function displayName(c: Conv) {
   return (
+    c.user?.username ||
     c.visitorName ||
     c.user?.name ||
-    c.user?.username ||
     c.user?.email ||
-    '访客'
+    '방문자'
   );
 }
 
@@ -384,24 +386,28 @@ export function ChatAgentMobile() {
         <header className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-line px-4 py-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-base font-medium">客服工作台</h1>
+              <h1 className="text-base font-medium">{csDict.workbenchTitle}</h1>
               <p className="text-[11px] text-muted mt-0.5">
-                {conn === 'open' ? '● 已连接' : conn === 'reconnecting' ? '○ 正在重连…' : '○ 连接中断'}
-                {totalUnread > 0 && ` · ${totalUnread} 条未读`}
+                {conn === 'open'
+                  ? csDict.connOpen
+                  : conn === 'reconnecting'
+                    ? csDict.connReconnecting
+                    : csDict.connLost}
+                {totalUnread > 0 && ` · ${totalUnread}${csDict.unreadSuffix}`}
               </p>
             </div>
             <button
               onClick={logout}
               className="text-xs px-3 py-1.5 border border-line text-muted active:bg-line/30"
             >
-              退出
+              {csDict.logout}
             </button>
           </div>
         </header>
 
         <main className="flex-1">
           {convs.length === 0 ? (
-            <p className="text-sm text-muted text-center py-16">暂无访客咨询</p>
+            <p className="text-sm text-muted text-center py-16">{csDict.emptyList}</p>
           ) : (
             convs.map((c) => (
               <button
@@ -422,7 +428,7 @@ export function ChatAgentMobile() {
                   <p className="text-[10px] text-muted mt-0.5">
                     {fromNow(c.lastMessageAt)}
                     {c.contact && ` · ${c.contactType === 'email' ? '✉' : '☎'} ${c.contact}`}
-                    {c.status === 'closed' && ' · 已结束'}
+                    {c.status === 'closed' && ` · ${csDict.endedBadge}`}
                   </p>
                 </div>
               </button>
@@ -440,15 +446,15 @@ export function ChatAgentMobile() {
         <button
           onClick={backToList}
           className="shrink-0 w-9 h-9 flex items-center justify-center text-lg active:bg-line/30"
-          aria-label="返回会话列表"
+          aria-label={csDict.backToList}
         >
           ‹
         </button>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium truncate">{sel ? displayName(sel) : '会话'}</div>
+          <div className="text-sm font-medium truncate">{sel ? displayName(sel) : csDict.conversation}</div>
           <div className="text-[11px] text-muted truncate">
             {sel?.contact && `${sel.contactType === 'email' ? '✉' : '☎'} ${sel.contact}`}
-            {sel?.status === 'closed' && ' · 已结束'}
+            {sel?.status === 'closed' && ` · ${csDict.endedBadge}`}
           </div>
         </div>
         {sel && (
@@ -456,14 +462,14 @@ export function ChatAgentMobile() {
             onClick={toggleClose}
             className="shrink-0 text-[11px] px-2.5 py-1.5 border border-line text-muted active:bg-line/30"
           >
-            {sel.status === 'open' ? '结束' : '重开'}
+            {sel.status === 'open' ? csDict.closeConv : csDict.reopenConv}
           </button>
         )}
       </header>
 
       <div ref={bodyRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         {loadingConv ? (
-          <p className="text-xs text-muted text-center mt-6">加载中…</p>
+          <p className="text-xs text-muted text-center mt-6">{csDict.loading}</p>
         ) : (
           sortedMessages.map((m) => {
             const mine = m.sender === 'admin';
@@ -480,9 +486,10 @@ export function ChatAgentMobile() {
                   ) : m.content ? (
                     <span className="whitespace-pre-wrap break-words">{m.content}</span>
                   ) : null}
-                  {/* 访客发来的商品 → 可点击的商品卡片（价格实时查，不存快照） */}
+                  {/* 访客发来的商品 → 可点击的商品卡片（价格实时查，不存快照）
+                      ⚠️ 客服是韩国人 → 卡片文案与商品名固定韩文，不跟访客语种走 */}
                   {m.productSlug ? (
-                    <ChatProductCard slug={m.productSlug} locale={sel?.locale} tone="light" />
+                    <ChatProductCard slug={m.productSlug} locale="ko" tone="light" />
                   ) : null}
                   <div className={`text-[10px] mt-1 ${mine ? 'text-white/60' : 'text-muted'}`}>
                     {fmtTime(m.createdAt)}
@@ -507,7 +514,7 @@ export function ChatAgentMobile() {
           onClick={() => fileRef.current?.click()}
           disabled={uploading || sel?.status === 'closed'}
           className="shrink-0 w-10 h-10 flex items-center justify-center border border-line text-muted disabled:opacity-40 active:bg-line/30"
-          aria-label="发送图片"
+          aria-label={csDict.sendImage}
         >
           {uploading ? '…' : '＋'}
         </button>
@@ -515,7 +522,7 @@ export function ChatAgentMobile() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           rows={1}
-          placeholder={sel?.status === 'closed' ? '会话已结束' : '输入消息…'}
+          placeholder={sel?.status === 'closed' ? csDict.inputPhClosed : csDict.inputPh}
           disabled={sel?.status === 'closed'}
           className="flex-1 resize-none border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-ink max-h-24 disabled:opacity-60"
         />
@@ -524,7 +531,7 @@ export function ChatAgentMobile() {
           disabled={!input.trim() || sel?.status === 'closed'}
           className="shrink-0 h-10 px-4 bg-ink text-white text-sm disabled:opacity-40"
         >
-          发送
+          {csDict.send}
         </button>
       </div>
     </div>

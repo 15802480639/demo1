@@ -3,15 +3,30 @@ import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { isoUtcSql } from '@/lib/chat-time';
 import { resolveStaff, advanceReadCursor } from '@/lib/chat-staff';
+import { judgeVisitorAccess } from '@/lib/chat-visitor';
 
-// 校验访客身份：URL 上的 ?guest= 必须与会话 guestToken 一致
-async function verifyGuest(conversationId: string, guest: string | null) {
-  if (!guest) return false;
+// 校验访客身份：
+//   ① 已登录的会话归属用户（主路径）
+//   ② 历史游客会话：URL 上的 ?guest= 必须与会话 guestToken 一致
+/**
+ * 访客访问权判定（登录归属优先，历史游客会话回落 guestToken）。
+ * 返回 null 表示放行。
+ */
+async function checkVisitorAccess(conversationId: string, guest: string | null) {
   const conv = await prisma.chatConversation.findUnique({
     where: { id: conversationId },
-    select: { guestToken: true },
+    select: { userId: true, guestToken: true },
   });
-  return !!conv && conv.guestToken === guest;
+  if (!conv) return { ok: false as const, notFound: true as const };
+
+  const session = await getSession();
+  const access = judgeVisitorAccess({
+    convUserId: conv.userId,
+    storedGuest: conv.guestToken,
+    guestToken: guest,
+    session,
+  });
+  return access;
 }
 
 // GET /api/chat/conversations/[id] —— 历史消息（客服[admin/agent] 或 会话所属访客）
@@ -27,8 +42,15 @@ export async function GET(
   // 客服身份：admin（后台）或 agent（H5）
   const staff = isAdmin ? null : await resolveStaff();
 
-  if (!isAdmin && !staff && !(await verifyGuest(id, guest))) {
-    return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+  if (!isAdmin && !staff) {
+    // 访客：必须已登录且是该会话的归属用户（历史游客会话回落 guestToken）
+    const access = await checkVisitorAccess(id, guest);
+    if ('notFound' in access) {
+      return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+    }
+    if (!access.ok) {
+      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+    }
   }
 
   // ⚠️ 必须用 raw 查询取字面 UTC ISO 字符串：
@@ -159,8 +181,12 @@ export async function PATCH(
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 });
   }
 
-  // 访客操作：仅允许标记已读，且须过 guest 校验
-  if (!(await verifyGuest(id, guest))) {
+  // 访客操作：仅允许标记已读，且须证明是该会话的归属用户
+  const access = await checkVisitorAccess(id, guest);
+  if ('notFound' in access) {
+    return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+  }
+  if (!access.ok) {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
   if (body.read === true) {

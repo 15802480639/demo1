@@ -16,7 +16,6 @@ export default async function LoginPage({
   const redirectTo = sp.redirect && sp.redirect.startsWith(`/${loc}`)
     ? sp.redirect
     : `/${loc}/account`;
-
   return (
     <div className="mx-auto max-w-[440px] px-4 py-20">
       <h1 className="font-display text-4xl text-ink mb-2">{dict.nav.login}</h1>

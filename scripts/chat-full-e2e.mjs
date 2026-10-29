@@ -3,6 +3,7 @@ import 'dotenv/config';
 import crypto from 'crypto';
 import pg from 'pg';
 import WebSocket from 'ws';
+import { loginTestCustomer } from './chat-test-user.mjs';
 
 const BASE = 'http://127.0.0.1:3000';
 const WS_URL = 'ws://127.0.0.1:4000';
@@ -27,19 +28,24 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || (await loginAdmin());
 if (!ADMIN_TOKEN) { console.log('缺少 ADMIN_TOKEN（自动登录也失败）'); process.exit(1); }
 console.log('start, token len', ADMIN_TOKEN.length);
 
-function open(url) {
+function open(url, cookie) {
   return new Promise((res, rej) => {
-    const ws = new WebSocket(url);
+    // ⚠️ ws 库签名：options 必须放第三个参数
+    const ws = cookie
+      ? new WebSocket(url, [], { headers: { Cookie: `ws_session=${cookie}` } })
+      : new WebSocket(url);
     ws.on('open', () => res(ws));
     ws.on('error', rej);
   });
 }
 
 // 1) 经 Next 建会话
+// ⚠️ 访客必须已登录才能建会话（2026-10-29 起）
+const cust = await loginTestCustomer('im');
 const created = await fetch(`${BASE}/api/chat/conversations`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ visitorName: '실시간테스트', contactType: 'none', locale: 'ko' }),
+  headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${cust.cookie}` },
+  body: JSON.stringify({ contactType: 'none', locale: 'ko' }),
 }).then((r) => r.json());
 console.log('1) 建会话:', created.id?.slice(0, 8), created.guestToken ? 'OK' : 'FAIL');
 const { id, guestToken } = created;
@@ -52,7 +58,7 @@ adminWs.on('message', (d) => adminEvents.push(JSON.parse(d.toString())));
 adminWs.send(JSON.stringify({ type: 'auth', role: 'admin', token: ADMIN_TOKEN }));
 await new Promise((r) => setTimeout(r, 300));
 
-const visitorWs = await open(WS_URL);
+const visitorWs = await open(WS_URL, cust.cookie);
 visitorWs.on('message', (d) => visitorEvents.push(JSON.parse(d.toString())));
 visitorWs.send(JSON.stringify({ type: 'auth', role: 'visitor', conversationId: id, guestToken }));
 await new Promise((r) => setTimeout(r, 300));

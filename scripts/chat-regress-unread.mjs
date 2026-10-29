@@ -6,6 +6,7 @@
 import 'dotenv/config';
 import WebSocket from 'ws';
 import { Pool } from 'pg';
+import { loginTestCustomer } from './chat-test-user.mjs';
 
 const BASE = 'http://127.0.0.1:3000';
 const WS = 'ws://127.0.0.1:4000';
@@ -59,11 +60,12 @@ async function loginAdmin() {
   return { cookie: getCookie('ws_session', sc), setCookie: sc };
 }
 
-async function createConv(name) {
+// ⚠️ 访客必须已登录才能建会话（2026-10-29 起）
+async function createConv(name, cookie) {
   const r = await fetch(`${BASE}/api/chat/conversations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ visitorName: name, contactType: 'none', locale: 'ko' }),
+    headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: `ws_session=${cookie}` } : {}) },
+    body: JSON.stringify({ contactType: 'none', locale: 'ko' }),
   });
   return r.json();
 }
@@ -130,14 +132,21 @@ async function main() {
     // ---------- 建立真实的 admin + visitor 连接 ----------
     const adminWs = await openWs({ type: 'auth', role: 'admin', token: tokData.token });
 
-    const conv = await createConv('专项回归访客');
+    // ⚠️ 访客侧现在必须带登录态：建会话要 cookie，WS 握手也要 cookie
+    //    （会话已绑定 userId → 服务端校验「登录用户 == 会话归属用户」）
+    const cust = await loginTestCustomer('im');
+    const conv = await createConv('专项回归访客', cust.cookie);
+    check('①D 访客登录后建会话成功', !!conv?.id, conv?.error || '');
     created.push(conv.id);
-    const visitorWs = await openWs({
-      type: 'auth',
-      role: 'visitor',
-      conversationId: conv.id,
-      guestToken: conv.guestToken,
-    });
+    const visitorWs = await openWs(
+      {
+        type: 'auth',
+        role: 'visitor',
+        conversationId: conv.id,
+        guestToken: conv.guestToken,
+      },
+      { headers: { Cookie: `ws_session=${cust.cookie}` } }
+    );
 
     let adminGotMsg = null;
     let adminGotConvUpdate = null;
@@ -219,15 +228,19 @@ async function main() {
     // ---------- ④C：REST 幂等（同 clientId 不重复落库） ----------
     await fetch(`${BASE}/api/chat/messages`, {
       method: 'POST',
-      headers: { Cookie: `ws_session=${cookie}`, 'Content-Type': 'application/json' },
+      // ⚠️ 必须用访客 cookie：admin 的 cookie 会被判定为客服身份
+      headers: { Cookie: `ws_session=${cust.cookie}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         conversationId: conv.id,
         content: 'REST兜底消息',
+        guest: conv.guestToken,
         clientId: 'c-regress-rest',
       }),
     });
     await sleep(500);
-    const hist = await fetch(`${BASE}/api/chat/conversations/${conv.id}?guest=${conv.guestToken}`);
+    const hist = await fetch(`${BASE}/api/chat/conversations/${conv.id}?guest=${conv.guestToken}`, {
+      headers: { Cookie: `ws_session=${cust.cookie}` },
+    });
     const hd = await hist.json();
     const dupCount = (hd.messages || []).filter((m) => m.content === 'REST兜底消息').length;
     check('④C 幂等：同 clientId 只落一条', dupCount === 1, `实际=${dupCount}`);

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getSession, requireAdmin, HttpError } from '@/lib/auth';
 import { isoUtcSql } from '@/lib/chat-time';
 import { requireStaff, unreadByStaff } from '@/lib/chat-staff';
+import { visitorDisplayName } from '@/lib/chat-visitor';
 
 // GET /api/chat/conversations —— 客服拉取会话列表（含未读数与末条预览）
 // 权限：后台管理员（admin）或 H5 客服（agent）均可
@@ -87,7 +88,9 @@ export async function GET() {
   return NextResponse.json({ conversations: rows });
 }
 
-// POST /api/chat/conversations —— 游客（或登录用户）新建会话，返回 id + guestToken
+// POST /api/chat/conversations —— 建会话
+// ⭐ 必须已登录（商城会员）：未登录一律 401，前端只给「登录 / 注册」引导。
+//    建会话时绑定 userId，并把 visitorName 设为注册账号名（客服端显示用）。
 export async function POST(req: NextRequest) {
   let body: any = {};
   try {
@@ -96,15 +99,19 @@ export async function POST(req: NextRequest) {
     body = {};
   }
 
+  // ① 必须是已登录的商城会员（admin/agent 走客服端，不在这里建访客会话）
+  const session = await getSession();
+  if (!session || session.role !== 'customer') {
+    return NextResponse.json({ error: 'AUTH_REQUIRED' }, { status: 401 });
+  }
+
   const contactType = ['email', 'phone', 'none'].includes(body.contactType) ? body.contactType : 'none';
   const contact =
     contactType === 'none' ? null : String(body.contact || '').slice(0, 200) || null;
-  const visitorName = body.visitorName ? String(body.visitorName).slice(0, 60) : null;
+  // ⚠️ 客户名称一律取注册账号名（子建要求），不采纳前端传来的昵称
+  const visitorName = visitorDisplayName(session);
   const locale = ['ko', 'zh', 'en'].includes(body.locale) ? body.locale : 'ko';
   const guestToken = crypto.randomBytes(18).toString('hex');
-
-  const session = await getSession();
-  const userId = session?.role === 'customer' ? session.id : null;
 
   const conv = await prisma.chatConversation.create({
     data: {
@@ -113,7 +120,7 @@ export async function POST(req: NextRequest) {
       contact,
       locale,
       guestToken,
-      userId,
+      userId: session.id,
     },
   });
 

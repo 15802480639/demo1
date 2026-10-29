@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useLocale } from '@/components/i18n/locale-provider';
+import { useAuth } from '@/components/auth/auth-provider';
 import { ChatSocket, type ChatMsg, type ChatStatus } from '@/lib/chat-ws';
 import {
   createConversation,
@@ -21,6 +22,15 @@ const LS_GUEST = 'chat_guest';
 const ASK_PRODUCT_EVENT = 'chat:ask-product';
 
 type ProductRefLite = { slug: string; name?: string };
+
+/**
+ * 会话按用户隔离存储：
+ *   同一台设备换账号登录时，不能看到上一个账号的会话。
+ *   key 形如 chat_conv_id:<userId>；无登录态时不写。
+ */
+function lsKey(base: string, userId: string | null) {
+  return userId ? `${base}:${userId}` : base;
+}
 
 function fmtTime(s: string) {
   try {
@@ -60,8 +70,15 @@ export function ChatWidget() {
   const { locale, dict } = useLocale();
   const t = dict.admin;
   const pathname = usePathname() || '';
+  const { user } = useAuth();
   // 后台管理页不显示站内客服入口（提前 return 必须放在所有 hooks 之后，遵守 hooks 规则）
   const isAdmin = /^\/[a-z-]+\/admin(\/|$)/.test(pathname);
+
+  // ⭐ 使用实时客服必须已注册登录（子建 2026-10-29）
+  //    未登录 → 浮窗只显示「登录 / 注册」引导，不允许发起会话。
+  const loggedIn = !!user && user.role === 'customer';
+  // 会话里显示给客服的客户名称 = 注册账号名
+  const accountName = user?.username || user?.name || user?.email || '';
 
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
@@ -78,7 +95,6 @@ export function ChatWidget() {
   const [conn, setConn] = useState<ChatStatus>('connecting');
   const [uploading, setUploading] = useState(false);
 
-  const [name, setName] = useState('');
   const [contactType, setContactType] = useState<'email' | 'phone' | 'none'>('none');
   const [contact, setContact] = useState('');
   const [starting, setStarting] = useState(false);
@@ -102,6 +118,28 @@ export function ChatWidget() {
     setPicked(null);
     setRefOff(false);
   }, [pathname]);
+
+  // 登录/注册回跳时带 ?chat=1 → 自动打开浮窗，让客户接着咨询
+  useEffect(() => {
+    if (isAdmin) return;
+    let chatFlag = false;
+    try {
+      chatFlag = new URLSearchParams(window.location.search).get('chat') === '1';
+    } catch {
+      /* noop */
+    }
+    if (chatFlag) {
+      setOpen(true);
+      // 清掉标记，避免刷新后一直自动弹出
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.delete('chat');
+        window.history.replaceState(null, '', u.toString());
+      } catch {
+        /* noop */
+      }
+    }
+  }, [pathname, isAdmin]);
 
   // 商品页「咨询此商品」按钮 → 打开浮窗并带上商品
   useEffect(() => {
@@ -219,16 +257,24 @@ export function ChatWidget() {
     [upsert, scrollBottom]
   );
 
-  // 初始化：从 localStorage 恢复会话
+  // 初始化：从 localStorage 恢复会话（按登录账号隔离）
   useEffect(() => {
     if (isAdmin) return;
-    const id = localStorage.getItem(LS_ID);
-    const g = localStorage.getItem(LS_GUEST);
+    if (!loggedIn) {
+      // 未登录 → 清掉残留会话状态（换账号/退出登录后不能沿用旧会话）
+      setConvId(null);
+      setGuest(null);
+      setMessages([]);
+      return;
+    }
+    const id = localStorage.getItem(lsKey(LS_ID, user?.id ?? null));
+    const g = localStorage.getItem(lsKey(LS_GUEST, user?.id ?? null));
     if (id && g) {
       setConvId(id);
       setGuest(g);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, loggedIn, user?.id]);
 
   // 会话就绪后：拉历史 + 建 WS
   useEffect(() => {
@@ -279,22 +325,23 @@ export function ChatWidget() {
   }, [open, convId, guest]);
 
   async function startConversation() {
+    if (!loggedIn) return;
     setStarting(true);
     try {
+      // ⚠️ 不传 visitorName：后端一律用注册账号名（子建要求）
       const d = await createConversation({
-        visitorName: name.trim() || undefined,
         contactType,
         contact: contact.trim() || undefined,
         locale,
       });
       setConvId(d.id);
       setGuest(d.guestToken);
-      localStorage.setItem(LS_ID, d.id);
-      localStorage.setItem(LS_GUEST, d.guestToken);
+      localStorage.setItem(lsKey(LS_ID, user?.id ?? null), d.id);
+      localStorage.setItem(lsKey(LS_GUEST, user?.id ?? null), d.guestToken);
       setMessages([]);
       setupSocket(d.id, d.guestToken);
     } catch {
-      alert('创建会话失败，请稍后再试');
+      alert(t.imStartFailed);
     } finally {
       setStarting(false);
     }
@@ -383,7 +430,7 @@ export function ChatWidget() {
       const url = await uploadImage(file, guest);
       await send(null, url);
     } catch {
-      alert('图片上传失败');
+      alert(t.imUploadFailed);
     } finally {
       setUploading(false);
     }
@@ -404,6 +451,12 @@ export function ChatWidget() {
 
   // 后台管理页不渲染站内客服入口
   if (isAdmin) return null;
+
+  // 登录/注册后的回跳地址：原页面 + ?chat=1（回跳后自动打开浮窗继续咨询）
+  const chatRedirectPath = useMemo(() => {
+    const base = pathname || `/${locale}`;
+    return `${base}${base.includes('?') ? '&' : '?'}chat=1`;
+  }, [pathname, locale]);
 
   return (
     <>
@@ -439,7 +492,9 @@ export function ChatWidget() {
           <div className="flex items-center justify-between px-4 py-3 bg-ink text-white">
             <div className="text-sm font-medium">{t.imTitle}</div>
             <div className="flex items-center gap-2">
-              {conn !== 'open' && (
+              {/* ⚠️ 只有已建立会话时才提示连接状态：
+                  未登录（还没会话）时并没有 WS 连接，显示"连接中断"会误导用户 */}
+              {convId && conn !== 'open' && (
                 <span className="text-[10px] text-amber-300">{t.imConnLost}</span>
               )}
               <button
@@ -452,17 +507,43 @@ export function ChatWidget() {
             </div>
           </div>
 
-          {!convId ? (
+          {!loggedIn ? (
+            /* ⭐ 未登录 → 只给「登录 / 注册」引导，不能发起会话 */
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col items-center justify-center text-center">
+              <div className="w-10 h-10 rounded-full bg-line/40 flex items-center justify-center mb-4">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"
+                    fill="currentColor"
+                    className="text-ink"
+                  />
+                </svg>
+              </div>
+              <p className="text-sm font-medium">{t.imLoginRequiredTitle}</p>
+              <p className="text-xs text-muted mt-1.5 mb-5">{t.imLoginRequiredDesc}</p>
+              <a
+                href={`/${locale}/login?redirect=${encodeURIComponent(chatRedirectPath)}`}
+                className="w-full btn-gold py-2.5 text-sm text-center"
+              >
+                {t.imLoginToChat}
+              </a>
+              <a
+                href={`/${locale}/register?redirect=${encodeURIComponent(chatRedirectPath)}`}
+                className="w-full mt-2 py-2.5 text-sm border border-line text-center"
+              >
+                {t.imRegisterBtn}
+              </a>
+            </div>
+          ) : !convId ? (
             /* 开始咨询表单 */
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               <p className="text-sm font-medium">{t.imStartTitle}</p>
               <p className="text-xs text-muted">{t.imLeaveContact}</p>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t.imNamePh}
-                className="w-full border border-line px-3 py-2 text-sm outline-none focus:border-ink"
-              />
+              {/* 客户名称 = 注册账号名（后端以账号名为准，这里只做展示） */}
+              <div className="w-full border border-line bg-bg px-3 py-2 text-sm flex items-center justify-between gap-2">
+                <span className="text-muted text-xs shrink-0">{t.imAccountName}</span>
+                <span className="truncate">{accountName}</span>
+              </div>
               <div>
                 <label className="text-xs text-muted">{t.imContactType}</label>
                 <div className="flex gap-2 mt-1">

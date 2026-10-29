@@ -376,7 +376,14 @@ export function ChatAdmin() {
           ) : (
             convs.map((c) => {
               const isSel = c.id === selectedId;
-              const name = c.visitorName || c.user?.name || c.user?.username || c.user?.email || (locale === 'ko' ? '방문자' : locale === 'zh' ? '访客' : 'Visitor');
+              // ⚠️ 客户名称 = 注册账号名（子建要求）：
+              //    账号名优先于昵称，避免历史会话里自填的昵称盖掉真实账号。
+              const name =
+                c.user?.username ||
+                c.visitorName ||
+                c.user?.name ||
+                c.user?.email ||
+                (locale === 'ko' ? '방문자' : locale === 'zh' ? '访客' : 'Visitor');
               return (
                 <button
                   key={c.id}
@@ -417,7 +424,7 @@ export function ChatAdmin() {
             <>
               <div className="flex items-center justify-between px-4 py-3 border-b border-line">
                 <div className="text-sm">
-                  {sel.visitorName || sel.user?.name || sel.user?.username || (locale === 'ko' ? '방문자' : locale === 'zh' ? '访客' : 'Visitor')}
+                  {sel.user?.username || sel.visitorName || sel.user?.name || (locale === 'ko' ? '방문자' : locale === 'zh' ? '访客' : 'Visitor')}
                   {sel.contact && (
                     <span className="text-xs text-muted ml-2">
                       {sel.contactType === 'email' ? '✉' : '☎'} {sel.contact}

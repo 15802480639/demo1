@@ -873,6 +873,16 @@ export type AdminDict = {
   imSelectConv: string;
   imConnLost: string;
   imLeaveContact: string;
+  // 登录门槛（实时客服必须登录才能使用）
+  imLoginRequiredTitle: string;
+  imLoginRequiredDesc: string;
+  imLoginBtn: string;
+  imRegisterBtn: string;
+  imLoginToChat: string;
+  imGuestBadge: string;
+  imAccountName: string;
+  imStartFailed: string;
+  imUploadFailed: string;
   // 商品引用（访客把商品发给客服）
   imAskProduct: string;
   imCurrentProduct: string;
@@ -1793,6 +1803,15 @@ const ko: Dict = {
     imSelectConv: '왼쪽에서 상담을 선택하세요',
     imConnLost: '연결 끊김, 재연결 중…',
     imLeaveContact: '답변을 위해 연락처를 남겨주세요',
+    imLoginRequiredTitle: '로그인 후 상담이 가능합니다',
+    imLoginRequiredDesc: '실시간 상담은 회원 로그인이 필요합니다',
+    imLoginBtn: '로그인',
+    imRegisterBtn: '회원가입',
+    imLoginToChat: '로그인하고 상담하기',
+    imGuestBadge: '비회원',
+    imAccountName: '아이디',
+    imStartFailed: '상담을 시작하지 못했습니다. 잠시 후 다시 시도하세요',
+    imUploadFailed: '이미지 업로드에 실패했습니다',
     imAskProduct: '이 상품 문의하기',
     imCurrentProduct: '현재 상품',
     imRemoveRef: '삭제',
@@ -2711,6 +2730,15 @@ const zh: Dict = {
     imSelectConv: '选择左侧会话开始回复',
     imConnLost: '连接中断，正在重连…',
     imLeaveContact: '为方便回复，可留下邮箱或电话',
+    imLoginRequiredTitle: '登录后即可咨询',
+    imLoginRequiredDesc: '实时客服需要登录商城账号',
+    imLoginBtn: '登录',
+    imRegisterBtn: '注册',
+    imLoginToChat: '登录并开始咨询',
+    imGuestBadge: '未登录',
+    imAccountName: '账号',
+    imStartFailed: '发起咨询失败，请稍后重试',
+    imUploadFailed: '图片上传失败',
     imAskProduct: '咨询此商品',
     imCurrentProduct: '当前商品',
     imRemoveRef: '移除',
@@ -3630,6 +3658,15 @@ const en: Dict = {
     imSelectConv: 'Select a conversation on the left',
     imConnLost: 'Connection lost, reconnecting…',
     imLeaveContact: 'Leave your email or phone so we can follow up',
+    imLoginRequiredTitle: 'Sign in to chat with us',
+    imLoginRequiredDesc: 'Live chat requires a member account',
+    imLoginBtn: 'Sign in',
+    imRegisterBtn: 'Sign up',
+    imLoginToChat: 'Sign in and start chatting',
+    imGuestBadge: 'Guest',
+    imAccountName: 'Account',
+    imStartFailed: 'Could not start the conversation. Please try again',
+    imUploadFailed: 'Image upload failed',
     imAskProduct: 'Ask about this item',
     imCurrentProduct: 'Current item',
     imRemoveRef: 'Remove',

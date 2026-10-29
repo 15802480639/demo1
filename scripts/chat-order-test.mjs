@@ -6,6 +6,7 @@
 import 'dotenv/config';
 import WebSocket from 'ws';
 import pg from 'pg';
+import { loginTestCustomer } from './chat-test-user.mjs';
 
 const BASE = 'http://127.0.0.1:3000';
 const WS = 'ws://127.0.0.1:4000';
@@ -27,9 +28,12 @@ const token = (setCookie.match(/ws_session=([^;]+)/) || [])[1];
 if (!token) throw new Error('拿不到 admin token');
 console.log('admin token ok');
 
-function wsConnect(role, auth) {
+function wsConnect(role, auth, cookie) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(WS);
+    // ⚠️ ws 库签名：options 必须放第三个参数（第二个是 protocols）
+    const ws = cookie
+      ? new WebSocket(WS, [], { headers: { Cookie: `ws_session=${cookie}` } })
+      : new WebSocket(WS);
     ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', role, ...auth })));
     ws.on('message', (raw) => {
       const m = JSON.parse(raw.toString());
@@ -41,17 +45,18 @@ function wsConnect(role, auth) {
   });
 }
 
-// 1) 建会话
+// 1) 建会话（⚠️ 访客必须已登录）
+const cust = await loginTestCustomer('im');
 const conv = await rest('/api/chat/conversations', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ visitorName: '顺序测试访客', contactType: 'none', locale: 'ko' }),
+  headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${cust.cookie}` },
+  body: JSON.stringify({ contactType: 'none', locale: 'ko' }),
 });
 const cid = conv.id;
 const guest = conv.guestToken;
 console.log('会话已建:', cid);
 
-const vWs = await wsConnect('visitor', { conversationId: cid, guestToken: guest });
+const vWs = await wsConnect('visitor', { conversationId: cid, guestToken: guest }, cust.cookie);
 const aWs = await wsConnect('admin', { token });
 await sleep(200);
 
@@ -98,7 +103,9 @@ aWs.send(JSON.stringify({ type: 'message', content: 'A1', clientId: dupClientId,
 await sleep(600);
 
 // 4) REST 拉历史
-const hist = await rest(`/api/chat/conversations/${cid}?guest=${encodeURIComponent(guest)}`);
+const hist = await rest(`/api/chat/conversations/${cid}?guest=${encodeURIComponent(guest)}`, {
+  headers: { Cookie: `ws_session=${cust.cookie}` },
+});
 console.log('\n=== REST 历史返回（服务端按 seq 排序）===');
 hist.messages.forEach((m, i) =>
   console.log(`  #${i} ${m.sender.padEnd(7)} "${m.content}"  seq=${m.seq}  createdAt=${m.createdAt}`)

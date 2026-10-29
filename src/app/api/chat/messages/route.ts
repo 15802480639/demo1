@@ -5,6 +5,7 @@ import { isoUtcSql } from '@/lib/chat-time';
 import { broadcastChatMessage } from '@/lib/chat-broadcast';
 import { resolveStaff } from '@/lib/chat-staff';
 import { normalizeSlug } from '@/lib/chat-product';
+import { judgeVisitorAccess } from '@/lib/chat-visitor';
 
 // POST /api/chat/messages —— 兜底发送（主路径是 WebSocket，断线时由前端用此接口 + 轮询）
 // 客服（admin/agent）或会话所属访客均可调用。返回落库后的消息。
@@ -35,26 +36,29 @@ export async function POST(req: NextRequest) {
   /** 实际回复人身份键（仅客服侧有值），用于归属统计 */
   let sentByStaffId: string | null = null;
 
+  const conv = await prisma.chatConversation.findUnique({
+    where: { id: conversationId },
+    select: { guestToken: true, userId: true },
+  });
+  if (!conv) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+
   if (isAdmin || staff) {
     sender = 'admin';
     sentByStaffId = isAdmin ? `admin:${session!.id}` : staff!.staffId;
   } else {
+    // 访客：必须已登录且是该会话的归属用户（历史游客会话回落 guestToken）
     const guest = typeof body.guest === 'string' ? body.guest : null;
-    const conv = await prisma.chatConversation.findUnique({
-      where: { id: conversationId },
-      select: { guestToken: true },
+    const access = judgeVisitorAccess({
+      convUserId: conv.userId,
+      storedGuest: conv.guestToken,
+      guestToken: guest,
+      session,
     });
-    if (!conv || !guest || conv.guestToken !== guest) {
+    if (!access.ok) {
       return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
     }
     sender = 'visitor';
   }
-
-  const conv = await prisma.chatConversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true },
-  });
-  if (!conv) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
 
   // 幂等：同一 clientId 重复提交（WS 超时后 REST 补发）→ 返回已存在的那条，不重复落库
   if (clientId) {

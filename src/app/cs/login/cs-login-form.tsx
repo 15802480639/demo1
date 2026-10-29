@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { csDict } from '@/lib/cs-dict';
 
 // H5 客服登录表单
 // 账号由后台「客服账号管理」创建，商城账号在此一律无效（后端只认 ChatAgent 表）。
+// 界面固定韩文（客服团队为韩国人），文案见 src/lib/cs-dict.ts
 export function CsLoginForm() {
   const router = useRouter();
   const [username, setUsername] = useState('');
@@ -14,12 +16,12 @@ export function CsLoginForm() {
 
   const errMsg = (code: string) => {
     const map: Record<string, string> = {
-      missing_fields: '请输入账号和密码',
-      invalid_credentials: '账号或密码不正确',
-      agent_disabled: '该账号已被停用，请联系管理员',
-      server_error: '服务器开小差了，请稍后重试',
+      missing_fields: csDict.errMissingFields,
+      invalid_credentials: csDict.errInvalidCredentials,
+      agent_disabled: csDict.errAgentDisabled,
+      server_error: csDict.errServerError,
     };
-    return map[code] ?? '登录失败，请重试';
+    return map[code] ?? csDict.errLoginFailed;
   };
 
   async function submit(e: React.FormEvent) {
@@ -50,7 +52,7 @@ export function CsLoginForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div>
-        <label className="text-xs tracking-widest text-muted">客服账号</label>
+        <label className="text-xs tracking-widest text-muted">{csDict.loginAccountLabel}</label>
         <input
           required
           autoComplete="username"
@@ -60,11 +62,11 @@ export function CsLoginForm() {
           value={username}
           onChange={(e) => setUsername(e.target.value.trim())}
           className="w-full border border-line bg-surface px-4 py-3 outline-none focus:border-accent transition-colors mt-1"
-          placeholder="请输入客服账号"
+          placeholder={csDict.loginAccountPh}
         />
       </div>
       <div>
-        <label className="text-xs tracking-widest text-muted">密码</label>
+        <label className="text-xs tracking-widest text-muted">{csDict.loginPasswordLabel}</label>
         <input
           required
           type="password"
@@ -72,12 +74,12 @@ export function CsLoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full border border-line bg-surface px-4 py-3 outline-none focus:border-accent transition-colors mt-1"
-          placeholder="请输入密码"
+          placeholder={csDict.loginPasswordPh}
         />
       </div>
       {err && <p className="text-sm text-red-600">{err}</p>}
       <button type="submit" disabled={loading} className="btn-gold w-full disabled:opacity-60">
-        {loading ? '登录中…' : '登录'}
+        {loading ? csDict.loginSubmitting : csDict.loginSubmit}
       </button>
     </form>
   );

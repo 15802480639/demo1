@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { SessionUser } from '@/lib/auth';
 
 type AuthCtx = {
@@ -27,6 +27,12 @@ export function AuthProvider({
       setCurrent(null);
     }
   }, []);
+
+  // ⚠️ 切换账号后必须同步：服务端传的 user 是首次渲染时的快照，
+  //    登录/退出后若不同步，组件会一直读到旧身份。
+  useEffect(() => {
+    setCurrent(user);
+  }, [user]);
 
   return (
     <Ctx.Provider value={{ user: current, setUser: setCurrent, logout }}>

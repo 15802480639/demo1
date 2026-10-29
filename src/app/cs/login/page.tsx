@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getCsSession } from '@/lib/cs-auth';
+import { csDict } from '@/lib/cs-dict';
 import { CsLoginForm } from './cs-login-form';
 
 export const metadata: Metadata = {
-  title: '客服登录',
+  title: csDict.loginTitle,
   robots: { index: false, follow: false },
 };
 
@@ -19,15 +20,13 @@ export default async function CsLoginPage() {
       <div className="w-full max-w-[380px]">
         <div className="text-center mb-8">
           <p className="text-[11px] tracking-[0.3em] text-accent uppercase">J&amp;D</p>
-          <h1 className="text-2xl font-medium mt-2">客服工作台</h1>
-          <p className="text-sm text-muted mt-2">使用客服账号登录</p>
+          <h1 className="text-2xl font-medium mt-2">{csDict.loginTitle}</h1>
+          <p className="text-sm text-muted mt-2">{csDict.loginSubtitle}</p>
         </div>
         <div className="bg-surface border border-line p-6">
           <CsLoginForm />
         </div>
-        <p className="text-center text-[11px] text-muted mt-6">
-          账号由管理员在后台创建
-        </p>
+        <p className="text-center text-[11px] text-muted mt-6">{csDict.loginFooter}</p>
       </div>
     </main>
   );

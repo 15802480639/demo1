@@ -107,6 +107,21 @@ function verifyCsToken(token) {
   return data; // { id, username, displayName, scope }
 }
 
+/**
+ * 校验商城会员会话令牌（ws_session Cookie 里 role==='customer' 的那部分）。
+ *
+ * ⭐ 用途：实时客服要求访客必须已注册登录（子建 2026-10-29）。
+ *    访客连 WS 时浏览器会自动带上 ws_session Cookie（Cookie 不区分端口，
+ *    生产环境同域 /ws 反代也一样带），据此确认「我是登录用户」。
+ *    注意 role==='admin' 的令牌不算 —— 那是后台管理员，身份不同。
+ */
+function verifyCustomerToken(token) {
+  const data = parseToken(token);
+  if (!data) return null;
+  if (data.role !== 'customer') return null;
+  return data; // { id, username, name, email, role }
+}
+
 /** 解析请求头 Cookie: "a=1; ws_session=xxx" */
 function parseCookies(header) {
   const out = {};
@@ -176,6 +191,24 @@ async function getConversation(id) {
     [id]
   );
   return r.rows[0] || null;
+}
+
+/**
+ * 校验访客是否有权连接某个会话。
+ *
+ * ⭐ 规则（子建 2026-10-29）：使用实时客服必须先在商城注册并登录。
+ *   ① 会话已绑定 userId → 必须凭登录态证明「我就是归属用户」
+ *      （ws_session cookie 里带 User.id，或访客短时令牌）
+ *   ② 历史游客会话（userId 为 null）→ 回落 guestToken 校验
+ */
+async function verifyVisitorAccess(conv, guestToken, sessionUser) {
+  if (!conv) return false;
+  if (conv.userId) {
+    // 已登录用户会话：必须是归属用户本人
+    return !!sessionUser && sessionUser.id === conv.userId;
+  }
+  // 历史游客会话：guestToken 匹配即可（仅限这一个会话）
+  return !!conv.guestToken && !!guestToken && conv.guestToken === guestToken;
 }
 
 /**
@@ -437,6 +470,8 @@ wss.on('connection', (ws, req) => {
     cookieAdminUser: null,
     // 握手阶段从 Cookie 解析出的 H5 客服身份
     cookieAgentUser: null,
+    // 握手阶段从 Cookie 解析出的商城会员身份（访客侧「必须登录」校验用）
+    cookieCustomerUser: null,
   };
   ws.on('pong', () => {
     ws.isAlive = true;
@@ -459,6 +494,12 @@ wss.on('connection', (ws, req) => {
     if (csToken) {
       const agent = verifyCsToken(csToken);
       if (agent) ws.meta.cookieAgentUser = agent;
+    }
+    // 商城会员身份（role=customer）→ 访客连 WS 时的「必须登录」依据
+    const custToken = cookies[SESSION_COOKIE];
+    if (custToken) {
+      const customer = verifyCustomerToken(custToken);
+      if (customer) ws.meta.cookieCustomerUser = customer;
     }
   } catch {
     /* 忽略 cookie 解析异常，走后续 auth 消息鉴权 */
@@ -534,12 +575,15 @@ wss.on('connection', (ws, req) => {
       }
       if (msg.role === 'visitor') {
         const conv = await getConversation(msg.conversationId);
-        if (!conv || !conv.guestToken || conv.guestToken !== msg.guestToken) {
+        // ⭐ 访客必须已登录（会话已绑定 userId 时），或持历史游客会话的 guestToken
+        const sessionUser = ws.meta.cookieCustomerUser || null;
+        if (!(await verifyVisitorAccess(conv, msg.guestToken, sessionUser))) {
           send(ws, { type: 'error', message: 'BAD_CONVERSATION' });
           ws.close();
           return;
         }
         ws.meta = {
+          ...ws.meta,
           authed: true,
           role: 'visitor',
           conversationId: conv.id,

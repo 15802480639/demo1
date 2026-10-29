@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { getOssConfig, uploadToOss } from '@/lib/oss';
 import { prisma } from '@/lib/prisma';
 import { resolveStaff } from '@/lib/chat-staff';
+import { judgeVisitorAccess } from '@/lib/chat-visitor';
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
@@ -29,7 +30,8 @@ async function resolveChatDirs() {
   return dirs;
 }
 
-// POST /api/chat/upload —— 客服图片（admin 或 H5 客服 agent）或游客图片（凭 guestToken 校验会话存在）
+// POST /api/chat/upload —— 客服图片（admin 或 H5 客服 agent）或访客图片
+// 访客侧：必须已登录且是该会话的归属用户（历史游客会话回落 guestToken）
 // 走 OSS 优先，失败回落本地 /uploads/chat。返回可访问 URL。
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -42,9 +44,16 @@ export async function POST(req: NextRequest) {
     if (!guest) return NextResponse.json({ error: 'NO_GUEST' }, { status: 401 });
     const conv = await prisma.chatConversation.findFirst({
       where: { guestToken: guest },
-      select: { id: true },
+      select: { id: true, userId: true, guestToken: true },
     });
     if (!conv) return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+    const access = judgeVisitorAccess({
+      convUserId: conv.userId,
+      storedGuest: conv.guestToken,
+      guestToken: guest,
+      session,
+    });
+    if (!access.ok) return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
   const form = await req.formData();

@@ -1,9 +1,14 @@
 // 验证：后台(admin WS)发消息 → 前台游客(visitor WS)是否秒收（实时方向）
 import 'dotenv/config';
 import WebSocket from 'ws';
+import { loginTestCustomer } from './chat-test-user.mjs';
 
 const BASE = 'http://127.0.0.1:3000';
 const WS = 'ws://127.0.0.1:4000';
+
+// ⚠️ 访客必须已登录（2026-10-29 起）
+const cust = await loginTestCustomer('im');
+const CUST_COOKIE = cust.cookie;
 
 function getCookie(name, header) {
   const m = header.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
@@ -11,17 +16,21 @@ function getCookie(name, header) {
 }
 
 async function createConv() {
+  // ⚠️ 访客必须已登录才能建会话（2026-10-29 起）
   const r = await fetch(`${BASE}/api/chat/conversations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ visitorName: 'RT测试', contactType: 'none', locale: 'ko' }),
+    headers: { 'Content-Type': 'application/json', Cookie: `ws_session=${CUST_COOKIE}` },
+    body: JSON.stringify({ contactType: 'none', locale: 'ko' }),
   });
   return r.json();
 }
 
-function openWs(role, auth) {
+function openWs(role, auth, cookie) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(WS);
+    // ⚠️ ws 库签名：options 必须放第三个参数
+    const ws = cookie
+      ? new WebSocket(WS, [], { headers: { Cookie: `ws_session=${cookie}` } })
+      : new WebSocket(WS);
     ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', role, ...auth })));
     ws.on('message', (d) => {
       const m = JSON.parse(d.toString());
@@ -37,7 +46,7 @@ async function main() {
   console.log('conv id:', conv.id, 'guest:', conv.guestToken.slice(0, 8) + '…');
 
   // 游客 WS
-  const vws = await openWs('visitor', { conversationId: conv.id, guestToken: conv.guestToken });
+  const vws = await openWs('visitor', { conversationId: conv.id, guestToken: conv.guestToken }, CUST_COOKIE);
   let visitorGot = null;
   vws.on('message', (d) => {
     const m = JSON.parse(d.toString());
@@ -71,7 +80,9 @@ async function main() {
   }
 
   // 顺便验证 REST 历史能取到（轮询兜底依据）
-  const hist = await fetch(`${BASE}/api/chat/conversations/${conv.id}?guest=${conv.guestToken}`);
+  const hist = await fetch(`${BASE}/api/chat/conversations/${conv.id}?guest=${conv.guestToken}`, {
+    headers: { Cookie: `ws_session=${CUST_COOKIE}` },
+  });
   const hd = await hist.json();
   console.log('  [REST 历史条数]', hd.messages?.length, hd.messages?.map((m) => m.sender + ':' + m.content).join(' | '));
 
