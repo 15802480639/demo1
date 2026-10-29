@@ -20,6 +20,16 @@ export function proxy(request: NextRequest) {
     (l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`),
   );
 
+  // ⚠️ H5 客服台（/cs）刻意不带语言前缀 —— 它是客服内部工具，
+  //   固定中文界面、与商城前台完全隔离（不继承顶栏/底栏/浮窗）。
+  //   若在这里加语言前缀 → /cs 会被改写成 /ko/cs（该路由不存在）→ 404。
+  //   必须原样放行。
+  if (pathname === '/cs' || pathname.startsWith('/cs/')) {
+    const csHeaders = new Headers(request.headers);
+    csHeaders.set('x-ws-locale', detectLocale(request));
+    return NextResponse.next({ request: { headers: csHeaders } });
+  }
+
   // 2026-10-19：把当前语种写进请求头。
   // not-found.tsx 这类拿不到 params 的组件靠它反推 locale，
   // 否则三语站的 404 会恒显默认语种（next-url/referer 都不可靠）。

@@ -175,10 +175,15 @@ export function ChatAdmin() {
     });
 
     // 客服读过的会话 → 未读数归零（服务端回推）
+    // ⚠️ 服务端的未读数按客服各算各的 → read 事件不再携带统一的 unreadAdmin，
+    //    真正的未读数由 convUpdate 逐连接下发（每个客服拿自己的数）。
+    //    这里只把"自己正在看的会话"清零，其余保持不动。
     sock.on('read', (ev: any) => {
       setConvs((prev) =>
         prev.map((c) =>
-          c.id === ev.conversationId ? { ...c, unreadAdmin: ev.unreadAdmin ?? 0 } : c
+          c.id === ev.conversationId
+            ? { ...c, unreadAdmin: selectedRef.current === ev.conversationId ? 0 : c.unreadAdmin }
+            : c
         )
       );
     });

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, requireAdmin, HttpError } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { getOssConfig, uploadToOss } from '@/lib/oss';
 import { prisma } from '@/lib/prisma';
+import { resolveStaff } from '@/lib/chat-staff';
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
@@ -28,26 +29,22 @@ async function resolveChatDirs() {
   return dirs;
 }
 
-// POST /api/chat/upload —— 客服图片（管理员）或游客图片（凭 guestToken 校验会话存在）
+// POST /api/chat/upload —— 客服图片（admin 或 H5 客服 agent）或游客图片（凭 guestToken 校验会话存在）
 // 走 OSS 优先，失败回落本地 /uploads/chat。返回可访问 URL。
 export async function POST(req: NextRequest) {
   const session = await getSession();
   const isAdmin = session?.role === 'admin';
+  // H5 客服也可上传图片
+  const staff = isAdmin ? null : await resolveStaff();
   const guest = req.nextUrl.searchParams.get('guest');
 
-  if (!isAdmin) {
+  if (!isAdmin && !staff) {
     if (!guest) return NextResponse.json({ error: 'NO_GUEST' }, { status: 401 });
     const conv = await prisma.chatConversation.findFirst({
       where: { guestToken: guest },
       select: { id: true },
     });
     if (!conv) return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
-  } else {
-    try {
-      await requireAdmin();
-    } catch (e) {
-      if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });
-    }
   }
 
   const form = await req.formData();

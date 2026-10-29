@@ -3,11 +3,14 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { getSession, requireAdmin, HttpError } from '@/lib/auth';
 import { isoUtcSql } from '@/lib/chat-time';
+import { requireStaff, unreadByStaff } from '@/lib/chat-staff';
 
-// GET /api/chat/conversations —— 管理员拉取会话列表（含未读数与末条预览）
+// GET /api/chat/conversations —— 客服拉取会话列表（含未读数与末条预览）
+// 权限：后台管理员（admin）或 H5 客服（agent）均可
 export async function GET() {
+  let staff;
   try {
-    await requireAdmin();
+    staff = await requireStaff();
   } catch (e) {
     if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
@@ -57,15 +60,9 @@ export async function GET() {
     ORDER BY c."lastMessageAt" DESC
   `;
 
+  // 未读数按当前客服各自的已读游标计算（A 看了不影响 B 的红点）
   const ids = convs.map((c) => c.id);
-  const unread = ids.length
-    ? await prisma.chatMessage.groupBy({
-        by: ['conversationId'],
-        where: { conversationId: { in: ids }, sender: 'visitor', read: false },
-        _count: true,
-      })
-    : [];
-  const unreadMap = Object.fromEntries(unread.map((u) => [u.conversationId, u._count]));
+  const unreadMap = await unreadByStaff(ids, staff.staffId);
 
   const rows = convs.map((c) => ({
     id: c.id,
@@ -75,7 +72,7 @@ export async function GET() {
     status: c.status,
     locale: c.locale,
     lastMessageAt: c.lastMessageAt,
-    unreadAdmin: unreadMap[c.id] || 0,
+    unreadAdmin: unreadMap.get(c.id) || 0,
     lastPreview: c.lastContent || (c.lastImageUrl ? '[image]' : ''),
     lastSender: c.lastSender || null,
     user:

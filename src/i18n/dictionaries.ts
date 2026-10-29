@@ -876,6 +876,37 @@ export type AdminDict = {
   imRetry: string;
   imUploading: string;
   imDesktopNotify: string;
+  // 客服账号管理（H5 客服台账号）
+  saTitle: string;
+  saSubtitle: string;
+  saCreate: string;
+  saUsername: string;
+  saUsernamePh: string;
+  saDisplayName: string;
+  saDisplayNamePh: string;
+  saPassword: string;
+  saPasswordPh: string;
+  saCreateBtn: string;
+  saActive: string;
+  saInactive: string;
+  saLastLogin: string;
+  saNeverLogin: string;
+  saResetPwd: string;
+  saResetPwdTitle: string;
+  saNewPwd: string;
+  saDisable: string;
+  saEnable: string;
+  saDelete: string;
+  saDeleteConfirm: string;
+  saCreated: string;
+  saPwdChanged: string;
+  saStatusChanged: string;
+  saDeleted: string;
+  saEmpty: string;
+  saH5Hint: string;
+  saErrUsername: string;
+  saErrWeakPwd: string;
+  saErrTaken: string;
   // GEO 组件
   gkCommonFaq: string;
   gkLoading: string;
@@ -1759,6 +1790,37 @@ const ko: Dict = {
     imRetry: '다시 시도',
     imUploading: '업로드 중…',
     imDesktopNotify: '새 메시지 알림',
+    // 客服账号管理（H5 客服台账号）
+    saTitle: '客服 계정 관리',
+    saSubtitle: 'H5 상담 데스크 로그인 계정',
+    saCreate: '계정 추가',
+    saUsername: '로그인 아이디',
+    saUsernamePh: '영문/숫자/밑줄 3~32자',
+    saDisplayName: '이름',
+    saDisplayNamePh: '표시 이름',
+    saPassword: '초기 비밀번호',
+    saPasswordPh: '6자 이상',
+    saCreateBtn: '생성',
+    saActive: '사용 중',
+    saInactive: '정지됨',
+    saLastLogin: '최근 로그인',
+    saNeverLogin: '로그인 기록 없음',
+    saResetPwd: '비밀번호 변경',
+    saResetPwdTitle: '새 비밀번호 설정',
+    saNewPwd: '새 비밀번호',
+    saDisable: '정지',
+    saEnable: '재개',
+    saDelete: '삭제',
+    saDeleteConfirm: '이 계정을 삭제할까요?',
+    saCreated: '계정이 생성되었습니다',
+    saPwdChanged: '비밀번호가 변경되었습니다',
+    saStatusChanged: '상태가 변경되었습니다',
+    saDeleted: '계정이 삭제되었습니다',
+    saEmpty: '등록된 상담 계정이 없습니다',
+    saH5Hint: '상담 데스크 주소: /cs',
+    saErrUsername: '아이디 형식이 올바르지 않습니다 (영문/숫자/밑줄 3~32자)',
+    saErrWeakPwd: '비밀번호는 6자 이상이어야 합니다',
+    saErrTaken: '이미 사용 중인 아이디입니다',
     gkCommonFaq: '자주 묻는 질문',
     gkLoading: '불러오는 중…',
     gkKindFact: '기본 사실',
@@ -2641,6 +2703,37 @@ const zh: Dict = {
     imRetry: '重试',
     imUploading: '上传中…',
     imDesktopNotify: '新消息提醒',
+    // 客服账号管理（H5 客服台账号）
+    saTitle: '客服账号管理',
+    saSubtitle: 'H5 客服台登录账号',
+    saCreate: '新建账号',
+    saUsername: '登录账号',
+    saUsernamePh: '英文/数字/下划线 3~32 位',
+    saDisplayName: '姓名',
+    saDisplayNamePh: '显示名称',
+    saPassword: '初始密码',
+    saPasswordPh: '至少 6 位',
+    saCreateBtn: '创建',
+    saActive: '使用中',
+    saInactive: '已停用',
+    saLastLogin: '最近登录',
+    saNeverLogin: '从未登录',
+    saResetPwd: '改密码',
+    saResetPwdTitle: '设置新密码',
+    saNewPwd: '新密码',
+    saDisable: '停用',
+    saEnable: '启用',
+    saDelete: '删除',
+    saDeleteConfirm: '确定删除这个账号吗？',
+    saCreated: '账号已创建',
+    saPwdChanged: '密码已修改',
+    saStatusChanged: '状态已修改',
+    saDeleted: '账号已删除',
+    saEmpty: '还没有客服账号',
+    saH5Hint: '客服台地址：/cs',
+    saErrUsername: '账号格式不对（英文/数字/下划线 3~32 位）',
+    saErrWeakPwd: '密码至少 6 位',
+    saErrTaken: '该账号已被占用',
     gkCommonFaq: '常见问题',
     gkLoading: '加载中…',
     gkKindFact: '基本事实',
@@ -3524,6 +3617,37 @@ const en: Dict = {
     imRetry: 'Retry',
     imUploading: 'Uploading…',
     imDesktopNotify: 'New message',
+    // 客服账号管理（H5 客服台账号）
+    saTitle: 'Support agent accounts',
+    saSubtitle: 'H5 support console login accounts',
+    saCreate: 'New account',
+    saUsername: 'Username',
+    saUsernamePh: 'Letters/numbers/underscore, 3-32 chars',
+    saDisplayName: 'Name',
+    saDisplayNamePh: 'Display name',
+    saPassword: 'Initial password',
+    saPasswordPh: 'At least 6 characters',
+    saCreateBtn: 'Create',
+    saActive: 'Active',
+    saInactive: 'Disabled',
+    saLastLogin: 'Last login',
+    saNeverLogin: 'Never logged in',
+    saResetPwd: 'Reset password',
+    saResetPwdTitle: 'Set new password',
+    saNewPwd: 'New password',
+    saDisable: 'Disable',
+    saEnable: 'Enable',
+    saDelete: 'Delete',
+    saDeleteConfirm: 'Delete this account?',
+    saCreated: 'Account created',
+    saPwdChanged: 'Password changed',
+    saStatusChanged: 'Status updated',
+    saDeleted: 'Account deleted',
+    saEmpty: 'No support accounts yet',
+    saH5Hint: 'Support console URL: /cs',
+    saErrUsername: 'Invalid username (letters/numbers/underscore, 3-32 chars)',
+    saErrWeakPwd: 'Password must be at least 6 characters',
+    saErrTaken: 'Username already taken',
     gkCommonFaq: 'FAQ',
     gkLoading: 'Loading…',
     gkKindFact: 'Fact',

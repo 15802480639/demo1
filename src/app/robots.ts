@@ -17,6 +17,8 @@ export default function robots(): MetadataRoute.Robots {
     '/*/order',
     '/*/wishlist',
     '/api',
+    // H5 客服台（内部工具，不带语言前缀）
+    '/cs',
   ];
 
   const aiAgents = [

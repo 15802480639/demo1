@@ -55,7 +55,7 @@ export type ChatStatus = 'connecting' | 'open' | 'closed' | 'reconnecting';
 
 export class ChatSocket {
   private ws: WebSocket | null = null;
-  private role: 'admin' | 'visitor';
+  private role: 'admin' | 'agent' | 'visitor';
   private auth: any;
   private listeners: Record<string, Listener[]> = {};
   private reconnectAttempts = 0;
@@ -68,10 +68,10 @@ export class ChatSocket {
   private pendingAcks = new Map<string, any>();
 
   /**
-   * @param role 角色
-   * @param auth 鉴权载荷；也可以传一个返回载荷的函数/Promise（admin 需要先取短时令牌）
+   * @param role 角色：admin（后台）/ agent（H5 客服）/ visitor（访客）
+   * @param auth 鉴权载荷；也可以传一个返回载荷的函数/Promise（客服需先取短时令牌）
    */
-  constructor(role: 'admin' | 'visitor', auth: any) {
+  constructor(role: 'admin' | 'agent' | 'visitor', auth: any) {
     this.role = role;
     this.auth = auth;
   }

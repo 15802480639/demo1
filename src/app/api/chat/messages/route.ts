@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession, requireAdmin, HttpError } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { isoUtcSql } from '@/lib/chat-time';
 import { broadcastChatMessage } from '@/lib/chat-broadcast';
+import { resolveStaff } from '@/lib/chat-staff';
 
 // POST /api/chat/messages —— 兜底发送（主路径是 WebSocket，断线时由前端用此接口 + 轮询）
-// 管理员或会话所属访客均可调用。返回落库后的消息。
+// 客服（admin/agent）或会话所属访客均可调用。返回落库后的消息。
 export async function POST(req: NextRequest) {
   let body: any = {};
   try {
@@ -25,15 +26,15 @@ export async function POST(req: NextRequest) {
 
   const session = await getSession();
   const isAdmin = session?.role === 'admin';
+  // 客服身份：admin（后台）或 agent（H5 客服）
+  const staff = isAdmin ? null : await resolveStaff();
   let sender: 'admin' | 'visitor';
+  /** 实际回复人身份键（仅客服侧有值），用于归属统计 */
+  let sentByStaffId: string | null = null;
 
-  if (isAdmin) {
-    try {
-      await requireAdmin();
-    } catch (e) {
-      if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });
-    }
+  if (isAdmin || staff) {
     sender = 'admin';
+    sentByStaffId = isAdmin ? `admin:${session!.id}` : staff!.staffId;
   } else {
     const guest = typeof body.guest === 'string' ? body.guest : null;
     const conv = await prisma.chatConversation.findUnique({
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest) {
       sender,
       content: content || null,
       imageUrl: imageUrl || null,
+      sentByStaffId,
       ...(clientId ? { clientId } : {}),
     },
   });

@@ -38,6 +38,7 @@ export function AdminShell({
     { href: '/admin/geo', label: t.geo },
     { href: '/admin/geo-audit', label: t.geoAudit },
     { href: '/admin/chat', label: t.imTitle },
+    { href: '/admin/support-agents', label: t.saTitle },
   ];
 
   const isActive = (href: string, exact?: boolean) =>

@@ -534,11 +534,52 @@ model ChatConversation {
   /// 最后一条消息时间，列表排序用（必须 Timestamptz，见 ChatMessage.createdAt 注释）
   lastMessageAt DateTime @default(dbgenerated("now()")) @db.Timestamptz(3)
   messages    ChatMessage[]
+  /// 每个客服在该会话的已读游标（未读数按客服各自计算）
+  readCursors ChatReadCursor[]
   createdAt   DateTime @default(dbgenerated("now()")) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([status, lastMessageAt])
   @@index([userId])
+}
+
+/// 客服账号（独立于商城 User 表）。
+/// 账号由后台「客服账号管理」创建，H5 端用账号密码登录，
+/// 与商城用户体系完全隔离：不能进 /admin 后台，也不能进商城前台下单。
+model ChatAgent {
+  id           String    @id @default(cuid())
+  /// 登录账号（唯一，大小写敏感）
+  username     String    @unique
+  /// bcrypt 密码散列
+  passwordHash String
+  /// 客服姓名/昵称（展示用）
+  displayName  String
+  /// 是否在职。停用后无法登录，但历史消息保留
+  active       Boolean   @default(true)
+  /// 最后登录时间
+  lastLoginAt  DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(dbgenerated("now()")) @db.Timestamptz(3)
+  updatedAt    DateTime  @default(dbgenerated("now()")) @db.Timestamptz(3)
+
+  @@index([active])
+}
+
+/// 客服已读游标：记录每个客服在每个会话读到哪一条消息（按 seq 单调序号）。
+/// 未读数 = 该会话中 seq 大于 lastReadSeq 的访客消息条数。
+/// staffId 形如 "agent:<ChatAgent.id>"（H5 客服）或 "admin:<User.id>"（后台管理员）。
+model ChatReadCursor {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// 客服身份键：agent:<客服id> 或 admin:<管理员id>
+  staffId        String
+  /// 已读到的消息序号（含）。新消息 seq 更大 → 计为未读
+  lastReadSeq    Int              @default(0)
+  createdAt      DateTime         @default(dbgenerated("now()")) @db.Timestamptz(3)
+  updatedAt      DateTime         @default(dbgenerated("now()")) @db.Timestamptz(3)
+
+  @@unique([conversationId, staffId])
+  @@index([staffId])
 }
 
 /// 客服消息：单条聊天内容（文本或图片）。
@@ -548,6 +589,9 @@ model ChatMessage {
   conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   /// 发送方：visitor | admin | system
   sender         String // visitor | admin | system
+  /// 实际回复人（客服身份键：agent:<客服id> 或 admin:<管理员id>）。
+  /// sender 保持 'admin' 语义（访客侧靠它判断"客服已读"），此字段只用于内部归属统计。
+  sentByStaffId String?
   /// 文本内容（图片消息时可为空，imageUrl 承载）
   content        String?
   /// 图片 URL（OSS 或 /uploads 本地），文本消息为空

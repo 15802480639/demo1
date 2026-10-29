@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession, requireAdmin, HttpError } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { isoUtcSql } from '@/lib/chat-time';
+import { resolveStaff, advanceReadCursor } from '@/lib/chat-staff';
 
 // 校验访客身份：URL 上的 ?guest= 必须与会话 guestToken 一致
 async function verifyGuest(conversationId: string, guest: string | null) {
@@ -13,7 +14,7 @@ async function verifyGuest(conversationId: string, guest: string | null) {
   return !!conv && conv.guestToken === guest;
 }
 
-// GET /api/chat/conversations/[id] —— 历史消息（管理员 或 会话所属访客）
+// GET /api/chat/conversations/[id] —— 历史消息（客服[admin/agent] 或 会话所属访客）
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -23,7 +24,10 @@ export async function GET(
   const isAdmin = session?.role === 'admin';
   const guest = req.nextUrl.searchParams.get('guest');
 
-  if (!isAdmin && !(await verifyGuest(id, guest))) {
+  // 客服身份：admin（后台）或 agent（H5）
+  const staff = isAdmin ? null : await resolveStaff();
+
+  if (!isAdmin && !staff && !(await verifyGuest(id, guest))) {
     return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
   }
 
@@ -110,7 +114,7 @@ export async function GET(
 }
 
 // PATCH /api/chat/conversations/[id]
-//  - 管理员：{status:'open'|'closed'} 改状态；或 {read:true} 标记游客消息已读
+//  - 客服（admin/agent）：{status:'open'|'closed'} 改状态；或 {read:true} 推进已读游标
 //  - 访客：{read:true}（需 ?guest=）标记客服消息已读
 export async function PATCH(
   req: NextRequest,
@@ -120,6 +124,7 @@ export async function PATCH(
   const session = await getSession();
   const isAdmin = session?.role === 'admin';
   const guest = req.nextUrl.searchParams.get('guest');
+  const staff = isAdmin ? null : await resolveStaff();
 
   let body: any = {};
   try {
@@ -128,14 +133,13 @@ export async function PATCH(
     body = {};
   }
 
-  // 管理员操作
-  if (isAdmin) {
-    try {
-      await requireAdmin();
-    } catch (e) {
-      if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });
-    }
+  // 客服操作（后台管理员 或 H5 客服）
+  if (isAdmin || staff) {
+    const staffId = isAdmin ? `admin:${session!.id}` : staff!.staffId;
     if (body.read === true) {
+      // ⭐ 未读按客服各算各的：推进"自己"的已读游标，不动别人的。
+      //    同时把消息的 read 置 true（保留全局语义，供访客侧显示"客服已读"）。
+      await advanceReadCursor(id, staffId);
       await prisma.chatMessage.updateMany({
         where: { conversationId: id, sender: 'visitor', read: false },
         data: { read: true },

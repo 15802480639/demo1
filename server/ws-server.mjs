@@ -3,11 +3,13 @@
 // 设计要点（对齐 webshopp 既定方案）：
 //  - 监听 :4000；生产由 Nginx 将 /ws 反代到本服务，升级为 wss://。
 //  - 鉴权：admin 凭 Next 的 ws_session（HMAC-SHA256 无状态 token）校验；
+//          agent（H5 客服）凭 cs_session 校验；
 //          visitor 凭 conversationId + guestToken（存浏览器 localStorage）校验。
 //  - 消息落库用原生 pg（不依赖 Prisma 构建），与 Next 端共用同一 PostgreSQL。
-//  - 实时广播：新消息推给所有 admin 连接 + 该会话的 visitor 连接；
+//  - 实时广播：新消息推给所有客服连接 + 该会话的 visitor 连接；
 //    已读标记、输入态也实时同步，驱动后台红点 / 响铃 / 桌面通知。
 //  - 列名与 Prisma 迁移保持一致（驼峰、双引号），例如 "guestToken" / "conversationId"。
+//  - 未读数按客服各算各的（ChatReadCursor 游标），A 看了不影响 B 的红点。
 import 'dotenv/config';
 import http from 'http';
 import crypto from 'crypto';
@@ -21,6 +23,10 @@ const AUTH_SECRET = process.env.AUTH_SECRET || 'dev-insecure-secret-change-me';
 const DATABASE_URL = process.env.DATABASE_URL;
 // Next 端的会话 cookie 名（必须与 src/lib/auth.ts 的 SESSION_COOKIE 一致）
 const SESSION_COOKIE = 'ws_session';
+// H5 客服会话 cookie 名（必须与 src/lib/cs-auth.ts 的 CS_SESSION_COOKIE 一致）
+const CS_SESSION_COOKIE = 'cs_session';
+// H5 客服令牌作用域标记（与 src/lib/cs-auth.ts 的 CS_TOKEN_SCOPE 一致）
+const CS_TOKEN_SCOPE = 'cs-agent';
 // LISTEN/NOTIFY 频道：Next 进程（REST 兜底落库）用它通知本进程广播
 const NOTIFY_CHANNEL = 'chat_broadcast';
 
@@ -31,7 +37,7 @@ if (!DATABASE_URL) {
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 
-// ---------- 鉴权：复用 Next auth.ts 的 HMAC-SHA256 无状态 token 校验 ----------
+// ---------- 鉴权：复用 Next auth.ts / cs-auth.ts 的 HMAC-SHA256 无状态 token 校验 ----------
 /** 定长比较，避免时序侧信道 */
 function safeEqual(a, b) {
   const ba = Buffer.from(String(a));
@@ -41,12 +47,13 @@ function safeEqual(a, b) {
 }
 
 /**
- * 校验后台会话令牌。兼容两种来源：
- *  1) Cookie 里的 ws_session（握手时由浏览器自动带上，HttpOnly 也无所谓）
- *  2) /api/chat/ws-token 换来的短时令牌（Cookie 没被代理转发时的兜底）
- * 两者同为 AUTH_SECRET 签名、payload 含 id 且 role === 'admin'。
+ * 解析并验签一个 token 的 payload（不做角色判断）。
+ * 三种 token 共用同一个 AUTH_SECRET，靠 payload 内的字段区分：
+ *   ws_session cookie  → { id, role:'admin', ... }（无 scope，无 exp）
+ *   chat-ws 短时令牌   → { id, role, scope:'chat-ws', exp }
+ *   cs_session cookie  → { id, username, scope:'cs-agent' }
  */
-function verifyAdminToken(token) {
+function parseToken(token) {
   if (!token || typeof token !== 'string' || !token.includes('.')) return null;
   const [payload, sig] = token.split('.');
   const expected = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('base64url');
@@ -54,13 +61,50 @@ function verifyAdminToken(token) {
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
     if (!data.id) return null;
-    if (data.role !== 'admin') return null;
     // 短时令牌带 exp；cookie 会话令牌没有 exp
     if (data.exp && Date.now() > Number(data.exp)) return null;
-    return data; // { id, role, ... }
+    return data;
   } catch {
     return null;
   }
+}
+
+/**
+ * 校验后台管理员会话令牌。兼容两种来源：
+ *  1) Cookie 里的 ws_session（握手时由浏览器自动带上，HttpOnly 也无所谓）
+ *     → payload 无 scope 字段，只有 role === 'admin'
+ *  2) /api/chat/ws-token 换来的短时令牌（Cookie 没被代理转发时的兜底）
+ *     → payload scope === 'chat-ws' 且 role === 'admin'
+ */
+function verifyAdminToken(token) {
+  const data = parseToken(token);
+  if (!data || data.role !== 'admin') return null;
+  return data; // { id, role, ... }
+}
+
+/**
+ * 校验短时 WS 令牌（/api/chat/ws-token 签发）。
+ * scope 恒为 'chat-ws'，role 为 admin（后台）或 agent（H5 客服）。
+ */
+function verifyStaffWsToken(token) {
+  const data = parseToken(token);
+  if (!data) return null;
+  if (data.scope !== 'chat-ws') return null;
+  if (data.role !== 'admin' && data.role !== 'agent') return null;
+  return data;
+}
+
+/**
+ * 校验 H5 客服会话令牌（cs_session Cookie）。
+ * 与 ws_session 用同一个 AUTH_SECRET，但 payload 带 scope='cs-agent'，
+ * 靠 scope 隔离两套体系，防止后台令牌被当成客服令牌使用（跨体系令牌重放）。
+ */
+function verifyCsToken(token) {
+  const data = parseToken(token);
+  if (!data) return null;
+  if (!data.username) return null;
+  if (data.scope !== CS_TOKEN_SCOPE) return null;
+  return data; // { id, username, displayName, scope }
 }
 
 /** 解析请求头 Cookie: "a=1; ws_session=xxx" */
@@ -83,7 +127,9 @@ function parseCookies(header) {
 }
 
 // ---------- 连接状态 ----------
-const adminSockets = new Set(); // 所有已鉴权的客服连接
+// adminSockets：所有已鉴权的客服连接（后台管理员 + H5 客服）
+//   每条连接带 staffId，用于按客服分别计算未读数
+const adminSockets = new Set();
 const visitorSockets = new Map(); // conversationId -> Set<ws>
 
 function addVisitor(conversationId, ws) {
@@ -132,15 +178,33 @@ async function getConversation(id) {
   return r.rows[0] || null;
 }
 
-async function insertMessage(conversationId, sender, content, imageUrl, clientId) {
+/**
+ * 查客服账号是否在职。
+ * ⚠️ 必须查库：后台把账号停用后，已建立的 WS 连接不能继续有权限，
+ *    新连接也不能只凭 Cookie 里的令牌就通过（令牌 7 天才过期）。
+ */
+async function isAgentActive(agentId) {
+  const r = await pool.query(`SELECT "active" FROM "ChatAgent" WHERE "id" = $1`, [agentId]);
+  return !!(r.rows[0] && r.rows[0].active);
+}
+
+async function insertMessage(conversationId, sender, content, imageUrl, clientId, sentByStaffId) {
   // 幂等：同一 conversationId + clientId 只落一条（WS 与 REST 双通道可能重复提交）
   const r = await pool.query(
-    `INSERT INTO "ChatMessage" ("id", "conversationId", "sender", "content", "imageUrl", "clientId", "read", "createdAt")
-     VALUES ($1, $2, $3, $4, $5, $6, false, now())
+    `INSERT INTO "ChatMessage" ("id", "conversationId", "sender", "content", "imageUrl", "clientId", "sentByStaffId", "read", "createdAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, false, now())
      ON CONFLICT ("conversationId", "clientId") DO NOTHING
      RETURNING "id", "sender", "content", "imageUrl", "read", "clientId", "seq",
                ${ISO_UTC_SQL('"createdAt"')} AS "createdAtIso"`,
-    [crypto.randomUUID(), conversationId, sender, content ?? null, imageUrl ?? null, clientId ?? crypto.randomUUID()]
+    [
+      crypto.randomUUID(),
+      conversationId,
+      sender,
+      content ?? null,
+      imageUrl ?? null,
+      clientId ?? crypto.randomUUID(),
+      sentByStaffId ?? null,
+    ]
   );
 
   let row = r.rows[0];
@@ -186,12 +250,43 @@ async function insertMessage(conversationId, sender, content, imageUrl, clientId
   };
 }
 
-async function countUnreadAdmin(conversationId) {
+/**
+ * ⭐ 按客服身份计算某会话的未读数。
+ * 未读 = 该会话中 seq 大于"此客服已读游标"的访客消息条数。
+ * 每个客服有自己的游标 → A 看了不影响 B 的红点。
+ * staffId 形如 admin:<User.id> / agent:<ChatAgent.id>
+ */
+async function countUnreadForStaff(conversationId, staffId) {
+  if (!staffId) return 0;
   const r = await pool.query(
-    `SELECT COUNT(*)::int AS n FROM "ChatMessage" WHERE "conversationId" = $1 AND "sender" = 'visitor' AND "read" = false`,
-    [conversationId]
+    `SELECT COUNT(*)::int AS n
+       FROM "ChatMessage" m
+       LEFT JOIN "ChatReadCursor" c
+              ON c."conversationId" = m."conversationId" AND c."staffId" = $2
+      WHERE m."conversationId" = $1
+        AND m."sender" = 'visitor'
+        AND m."seq" > COALESCE(c."lastReadSeq", 0)`,
+    [conversationId, staffId]
   );
   return r.rows[0]?.n || 0;
+}
+
+/**
+ * 推进某客服在该会话的已读游标到当前最大 seq。
+ * GREATEST 保证只进不退（多端并发不会把游标拉回去）。
+ */
+async function advanceCursor(conversationId, staffId) {
+  if (!staffId) return;
+  await pool.query(
+    `INSERT INTO "ChatReadCursor" ("id", "conversationId", "staffId", "lastReadSeq", "createdAt", "updatedAt")
+     VALUES (gen_random_uuid()::text, $1, $2,
+             COALESCE((SELECT MAX("seq") FROM "ChatMessage" WHERE "conversationId" = $1), 0),
+             now(), now())
+     ON CONFLICT ("conversationId", "staffId")
+     DO UPDATE SET "lastReadSeq" = GREATEST("ChatReadCursor"."lastReadSeq", EXCLUDED."lastReadSeq"),
+                   "updatedAt" = now()`,
+    [conversationId, staffId]
+  );
 }
 
 async function markRead(conversationId, senderSide) {
@@ -255,23 +350,62 @@ const server = http.createServer((req, res) => {
   res.end('Upgrade Required');
 });
 
-/** 把一条已落库的消息广播给所有客服 + 该会话访客，并同步会话列表未读数 */
+/**
+ * 把一条已落库的消息广播给所有客服 + 该会话访客。
+ * ⭐ convUpdate 的未读数按客服各算各的 → 必须逐连接发送，不能群发同一个数字。
+ */
 async function broadcastMessage(conversationId, message) {
   const envelope = { type: 'message', conversationId, message };
   broadcastToAdmins(envelope);
   broadcastToVisitors(conversationId, envelope);
   try {
-    const unreadAdmin = await countUnreadAdmin(conversationId);
-    broadcastToAdmins({
-      type: 'convUpdate',
-      conversationId,
-      unreadAdmin,
+    await broadcastConvUpdate(conversationId, {
       lastMessageAt: message.createdAt,
       lastSender: message.sender,
       lastPreview: message.content || (message.imageUrl ? '[image]' : ''),
     });
   } catch {
     /* 统计失败不影响消息推送 */
+  }
+}
+
+/**
+ * 推送会话列表更新事件。未读数按每个客服自己的游标算 → 逐连接发送。
+ */
+async function broadcastConvUpdate(conversationId, extra) {
+  // 收集当前在线客服的 staffId（去重），一次查库拿到各自的未读数
+  const staffIds = new Set();
+  for (const ws of adminSockets) {
+    if (ws.meta?.staffId) staffIds.add(ws.meta.staffId);
+  }
+
+  const unreadMap = new Map();
+  if (staffIds.size) {
+    const list = [...staffIds];
+    const r = await pool.query(
+      `SELECT s."staffId",
+              COUNT(m."id")::int AS n
+         FROM unnest($2::text[]) AS s("staffId")
+         LEFT JOIN "ChatReadCursor" c
+                ON c."conversationId" = $1 AND c."staffId" = s."staffId"
+         LEFT JOIN "ChatMessage" m
+                ON m."conversationId" = $1
+               AND m."sender" = 'visitor'
+               AND m."seq" > COALESCE(c."lastReadSeq", 0)
+        GROUP BY s."staffId"`,
+      [conversationId, list]
+    );
+    for (const row of r.rows) unreadMap.set(row.staffId, row.n);
+  }
+
+  for (const ws of adminSockets) {
+    const staffId = ws.meta?.staffId;
+    send(ws, {
+      type: 'convUpdate',
+      conversationId,
+      unreadAdmin: unreadMap.get(staffId) || 0,
+      ...extra,
+    });
   }
 }
 
@@ -285,24 +419,34 @@ wss.on('connection', (ws, req) => {
     conversationId: null,
     guestToken: null,
     userId: null,
+    // 客服身份键：admin:<User.id> 或 agent:<ChatAgent.id>（未读游标分区键）
+    staffId: null,
     // 握手阶段从 Cookie 解析出的后台身份（尚未决定角色）
     cookieAdminUser: null,
+    // 握手阶段从 Cookie 解析出的 H5 客服身份
+    cookieAgentUser: null,
   };
   ws.on('pong', () => {
     ws.isAlive = true;
   });
 
-  // ⭐ 握手阶段解析 Cookie 里的 ws_session 并预先验签。
+  // ⭐ 握手阶段解析 Cookie 并预先验签。
   //    之前后台连不上就是因为 ws_session 是 HttpOnly，前端 JS 读不到，
   //    只能靠升级请求自动带上的 Cookie 来认身份（Cookie 不区分端口，天然可用）。
   //    注意：这里只"备好"身份，不直接认定角色 ——
   //    否则登录了 admin 的浏览器打开前台时，访客连接会被误当成客服连接。
+  //    两个 Cookie 各自独立解析：ws_session → 后台管理员，cs_session → H5 客服。
   try {
     const cookies = parseCookies(req?.headers?.cookie);
-    const token = cookies[SESSION_COOKIE];
-    if (token) {
-      const user = verifyAdminToken(token);
+    const adminToken = cookies[SESSION_COOKIE];
+    if (adminToken) {
+      const user = verifyAdminToken(adminToken);
       if (user) ws.meta.cookieAdminUser = user;
+    }
+    const csToken = cookies[CS_SESSION_COOKIE];
+    if (csToken) {
+      const agent = verifyCsToken(csToken);
+      if (agent) ws.meta.cookieAgentUser = agent;
     }
   } catch {
     /* 忽略 cookie 解析异常，走后续 auth 消息鉴权 */
@@ -333,9 +477,47 @@ wss.on('connection', (ws, req) => {
           ws.close();
           return;
         }
-        ws.meta = { ...ws.meta, authed: true, role: 'admin', userId: user.id };
+        ws.meta = {
+          ...ws.meta,
+          authed: true,
+          role: 'admin',
+          userId: user.id,
+          staffId: `admin:${user.id}`,
+        };
         adminSockets.add(ws);
         send(ws, { type: 'authed', role: 'admin' });
+        return;
+      }
+      if (msg.role === 'agent') {
+        // H5 客服：短时令牌（/api/chat/ws-token 签发，role=agent）或握手阶段的 cs_session
+        // ⚠️ 只认 role === 'agent' 的令牌 —— 后台管理员的令牌（role=admin）不能当客服用，
+        //    否则会出现 staffId 指向不存在的客服账号。
+        const tokenUser = verifyStaffWsToken(msg.token);
+        const user =
+          (tokenUser && tokenUser.role === 'agent' ? tokenUser : null) ||
+          ws.meta.cookieAgentUser ||
+          null;
+        if (!user) {
+          send(ws, { type: 'error', message: 'FORBIDDEN' });
+          ws.close();
+          return;
+        }
+        const agentId = user.id;
+        // 查库确认账号仍在职（停用即刻断开，不靠令牌过期）
+        if (!(await isAgentActive(agentId))) {
+          send(ws, { type: 'error', message: 'FORBIDDEN' });
+          ws.close();
+          return;
+        }
+        ws.meta = {
+          ...ws.meta,
+          authed: true,
+          role: 'agent',
+          userId: agentId,
+          staffId: `agent:${agentId}`,
+        };
+        adminSockets.add(ws);
+        send(ws, { type: 'authed', role: 'agent' });
         return;
       }
       if (msg.role === 'visitor') {
@@ -368,11 +550,11 @@ wss.on('connection', (ws, req) => {
 
     try {
       if (msg.type === 'message') {
-        // 确定会话：visitor 从连接元数据取；admin 必须由客户端显式带 conversationId
+        // 确定会话：visitor 从连接元数据取；客服（admin/agent）必须由客户端显式带 conversationId
         let conversationId = null;
         if (ws.meta.role === 'visitor') {
           conversationId = ws.meta.conversationId;
-        } else if (ws.meta.role === 'admin') {
+        } else if (ws.meta.role === 'admin' || ws.meta.role === 'agent') {
           conversationId = typeof msg.conversationId === 'string' ? msg.conversationId : null;
         }
         if (!conversationId) {
@@ -384,7 +566,10 @@ wss.on('connection', (ws, req) => {
           send(ws, { type: 'error', message: 'CONVERSATION_NOT_FOUND' });
           return;
         }
-        const sender = ws.meta.role === 'admin' ? 'admin' : 'visitor';
+        // 客服（admin 与 agent）统一以 sender='admin' 落库：
+        // 访客侧靠这个值判断"客服已读"，内部归属另存 sentByStaffId。
+        const sender = ws.meta.role === 'visitor' ? 'visitor' : 'admin';
+        const sentByStaffId = ws.meta.role === 'visitor' ? null : ws.meta.staffId;
         const content = typeof msg.content === 'string' ? msg.content.slice(0, 4000) : null;
         const imageUrl = typeof msg.imageUrl === 'string' ? msg.imageUrl.slice(0, 2000) : null;
         if (!content && !imageUrl) {
@@ -392,7 +577,14 @@ wss.on('connection', (ws, req) => {
           return;
         }
         const clientId = typeof msg.clientId === 'string' && msg.clientId ? msg.clientId : null;
-        const message = await insertMessage(conversationId, sender, content, imageUrl, clientId);
+        const message = await insertMessage(
+          conversationId,
+          sender,
+          content,
+          imageUrl,
+          clientId,
+          sentByStaffId
+        );
         if (!message) {
           send(ws, { type: 'error', message: 'INSERT_FAILED' });
           return;
@@ -406,12 +598,8 @@ wss.on('connection', (ws, req) => {
         broadcastToAdmins(envelope);
         broadcastToVisitors(conversationId, envelope);
 
-        // 实时更新后台列表（未读红点 / 预览）
-        const unreadAdmin = await countUnreadAdmin(conversationId);
-        broadcastToAdmins({
-          type: 'convUpdate',
-          conversationId,
-          unreadAdmin,
+        // 实时更新客服列表（未读红点 / 预览）—— 未读数按各客服的游标分别计算
+        await broadcastConvUpdate(conversationId, {
           lastMessageAt: message.createdAt,
           lastSender: sender,
           lastPreview: content || (imageUrl ? '[image]' : ''),
@@ -421,18 +609,19 @@ wss.on('connection', (ws, req) => {
       if (msg.type === 'read') {
         let conversationId = ws.meta.role === 'visitor' ? ws.meta.conversationId : msg.conversationId;
         if (!conversationId) return;
-        // 客服读取 → 把游客发的未读标为已读；访客读取 → 把客服发的未读标为已读
-        const side = ws.meta.role === 'admin' ? 'visitor' : 'admin';
-        await markRead(conversationId, side);
-        broadcastToAdmins({
-          type: 'read',
-          conversationId,
-          by: ws.meta.role,
-          unreadAdmin: await countUnreadAdmin(conversationId),
-        });
-        if (ws.meta.role === 'admin') {
-          broadcastToVisitors(conversationId, { type: 'read', conversationId, by: 'admin' });
+        if (ws.meta.role === 'visitor') {
+          // 访客读取 → 把客服发的未读标为已读
+          await markRead(conversationId, 'admin');
+          // ⚠️ 未读数按客服各算各的 → 不能群发一个数字，必须走 convUpdate 逐连接下发
+          await broadcastConvUpdate(conversationId, {});
+          broadcastToAdmins({ type: 'read', conversationId, by: 'visitor' });
+          return;
         }
+        // 客服读取 → 推进"自己"的已读游标（不动别人的）+ 把访客消息标记为已读
+        await advanceCursor(conversationId, ws.meta.staffId);
+        await markRead(conversationId, 'visitor');
+        await broadcastConvUpdate(conversationId, {});
+        broadcastToVisitors(conversationId, { type: 'read', conversationId, by: 'admin' });
         return;
       }
 
@@ -445,8 +634,12 @@ wss.on('connection', (ws, req) => {
           by: ws.meta.role,
           isTyping: !!msg.isTyping,
         };
-        if (ws.meta.role === 'admin') broadcastToVisitors(conversationId, obj);
-        else broadcastToAdmins(obj);
+        if (ws.meta.role === 'admin' || ws.meta.role === 'agent') {
+          broadcastToVisitors(conversationId, obj);
+          broadcastToAdmins(obj);
+        } else {
+          broadcastToAdmins(obj);
+        }
         return;
       }
     } catch (e) {
@@ -456,7 +649,7 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
-    if (ws.meta.role === 'admin') adminSockets.delete(ws);
+    if (ws.meta.role === 'admin' || ws.meta.role === 'agent') adminSockets.delete(ws);
     if (ws.meta.role === 'visitor' && ws.meta.conversationId) {
       removeVisitor(ws.meta.conversationId, ws);
     }
