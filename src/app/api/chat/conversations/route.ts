@@ -47,11 +47,12 @@ export async function GET() {
            u."email"    AS "userEmail",
            lm."content"   AS "lastContent",
            lm."imageUrl"  AS "lastImageUrl",
+           lm."productSlug" AS "lastProductSlug",
            lm."sender"    AS "lastSender"
     FROM "ChatConversation" c
     LEFT JOIN "User" u ON u."id" = c."userId"
     LEFT JOIN LATERAL (
-      SELECT m."content", m."imageUrl", m."sender"
+      SELECT m."content", m."imageUrl", m."productSlug", m."sender"
       FROM "ChatMessage" m
       WHERE m."conversationId" = c."id"
       ORDER BY m."seq" DESC
@@ -73,7 +74,9 @@ export async function GET() {
     locale: c.locale,
     lastMessageAt: c.lastMessageAt,
     unreadAdmin: unreadMap.get(c.id) || 0,
-    lastPreview: c.lastContent || (c.lastImageUrl ? '[image]' : ''),
+    lastPreview:
+      c.lastContent ||
+      (c.lastImageUrl ? '[image]' : c.lastProductSlug ? '[商品]' : ''),
     lastSender: c.lastSender || null,
     user:
       c.userName || c.userUsername || c.userEmail

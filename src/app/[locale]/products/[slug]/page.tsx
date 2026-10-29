@@ -13,6 +13,7 @@ import { JsonLd } from '@/components/seo/json-ld';
 import { ProductCard } from '@/components/product/product-card';
 import { AddToCart } from '@/components/product/add-to-cart';
 import { WishlistButton } from '@/components/product/wishlist-button';
+import { AskAboutProduct } from '@/components/product/ask-about-product';
 import { ReviewForm } from '@/components/product/review-form';
 import { ProductGallery } from '@/components/product/product-gallery';
 import { SectionHeading } from '@/components/home/section-heading';
@@ -167,8 +168,13 @@ export default async function ProductDetailPage({
 
           <AddToCart product={product} kakaoUrl={await getKakaoUrl()} />
 
-          <div className="mt-4">
+          <div className="mt-4 flex items-center gap-5">
             <WishlistButton slug={product.slug} className="inline-flex items-center gap-2 text-sm" />
+            <AskAboutProduct
+              slug={product.slug}
+              name={dispName}
+              className="inline-flex items-center gap-2 text-sm"
+            />
           </div>
 
           <div className="mt-8">

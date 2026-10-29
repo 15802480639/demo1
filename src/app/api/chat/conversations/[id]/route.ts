@@ -69,6 +69,7 @@ export async function GET(
       sender: string;
       content: string | null;
       imageUrl: string | null;
+      productSlug: string | null;
       read: boolean;
       clientId: string | null;
       seq: number;
@@ -79,6 +80,7 @@ export async function GET(
            m."sender",
            m."content",
            m."imageUrl",
+           m."productSlug",
            m."read",
            m."clientId",
            m."seq",
@@ -105,6 +107,7 @@ export async function GET(
       sender: m.sender,
       content: m.content,
       imageUrl: m.imageUrl,
+      productSlug: m.productSlug,
       read: m.read,
       createdAt: m.createdAt,
       clientId: m.clientId,

@@ -873,6 +873,12 @@ export type AdminDict = {
   imSelectConv: string;
   imConnLost: string;
   imLeaveContact: string;
+  // 商品引用（访客把商品发给客服）
+  imAskProduct: string;
+  imCurrentProduct: string;
+  imRemoveRef: string;
+  imSendProduct: string;
+  imProductSent: string;
   imRetry: string;
   imUploading: string;
   imDesktopNotify: string;
@@ -1787,6 +1793,11 @@ const ko: Dict = {
     imSelectConv: '왼쪽에서 상담을 선택하세요',
     imConnLost: '연결 끊김, 재연결 중…',
     imLeaveContact: '답변을 위해 연락처를 남겨주세요',
+    imAskProduct: '이 상품 문의하기',
+    imCurrentProduct: '현재 상품',
+    imRemoveRef: '삭제',
+    imSendProduct: '상품을 상담으로 보내기',
+    imProductSent: '상담으로 상품 전송',
     imRetry: '다시 시도',
     imUploading: '업로드 중…',
     imDesktopNotify: '새 메시지 알림',
@@ -2700,6 +2711,11 @@ const zh: Dict = {
     imSelectConv: '选择左侧会话开始回复',
     imConnLost: '连接中断，正在重连…',
     imLeaveContact: '为方便回复，可留下邮箱或电话',
+    imAskProduct: '咨询此商品',
+    imCurrentProduct: '当前商品',
+    imRemoveRef: '移除',
+    imSendProduct: '把商品发给客服',
+    imProductSent: '已把商品发给客服',
     imRetry: '重试',
     imUploading: '上传中…',
     imDesktopNotify: '新消息提醒',
@@ -3614,6 +3630,11 @@ const en: Dict = {
     imSelectConv: 'Select a conversation on the left',
     imConnLost: 'Connection lost, reconnecting…',
     imLeaveContact: 'Leave your email or phone so we can follow up',
+    imAskProduct: 'Ask about this item',
+    imCurrentProduct: 'Current item',
+    imRemoveRef: 'Remove',
+    imSendProduct: 'Send item to agent',
+    imProductSent: 'Item sent to agent',
     imRetry: 'Retry',
     imUploading: 'Uploading…',
     imDesktopNotify: 'New message',

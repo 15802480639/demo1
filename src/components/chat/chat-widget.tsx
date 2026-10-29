@@ -11,9 +11,16 @@ import {
   markRead,
   uploadImage,
 } from '@/lib/chat-api';
+import { parseProductRef, productRefFromPath } from '@/lib/chat-product';
+import { ChatProductCard } from '@/components/chat/chat-product-card';
 
 const LS_ID = 'chat_conv_id';
 const LS_GUEST = 'chat_guest';
+
+/** 商品页「咨询此商品」按钮派发的自定义事件名 */
+const ASK_PRODUCT_EVENT = 'chat:ask-product';
+
+type ProductRefLite = { slug: string; name?: string };
 
 function fmtTime(s: string) {
   try {
@@ -76,13 +83,80 @@ export function ChatWidget() {
   const [contact, setContact] = useState('');
   const [starting, setStarting] = useState(false);
 
+  // ============ 商品引用（访客把商品发给客服） ============
+  // 当前所在页面若是商品详情页 → 自动带上该商品
+  const pathProduct = useMemo(() => productRefFromPath(pathname), [pathname]);
+  // 显式选中的商品（商品页按钮 / 粘贴链接识别出来的），优先级高于页面商品
+  const [picked, setPicked] = useState<ProductRefLite | null>(null);
+  // 用户主动取消引用（✕）后不再自动带上页面商品
+  const [refOff, setRefOff] = useState(false);
+  // 引用条上显示的名字（从 /api/chat/product 拿真实商品名）
+  const [refName, setRefName] = useState<string>('');
+
+  const attached: ProductRefLite | null = refOff
+    ? null
+    : picked ?? (pathProduct ? { slug: pathProduct.slug } : null);
+
+  // 页面切换 → 清掉显式选择与取消标记（避免把 A 商品带到 B 商品页）
+  useEffect(() => {
+    setPicked(null);
+    setRefOff(false);
+  }, [pathname]);
+
+  // 商品页「咨询此商品」按钮 → 打开浮窗并带上商品
+  useEffect(() => {
+    function onAsk(e: Event) {
+      const detail = (e as CustomEvent<ProductRefLite>)?.detail;
+      if (!detail?.slug) return;
+      setOpen(true);
+      setPicked({ slug: detail.slug, name: detail.name });
+    }
+    window.addEventListener(ASK_PRODUCT_EVENT, onAsk);
+    return () => window.removeEventListener(ASK_PRODUCT_EVENT, onAsk);
+  }, []);
+
+  // 引用条商品名：取一次即可（接口有 60 秒缓存）
+  useEffect(() => {
+    const slug = attached?.slug;
+    if (!slug) {
+      setRefName('');
+      return;
+    }
+    if (attached?.name) {
+      setRefName(attached.name);
+      return;
+    }
+    let alive = true;
+    fetch(`/api/chat/product?slug=${encodeURIComponent(slug)}&locale=${encodeURIComponent(locale)}`, {
+      cache: 'no-store',
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        const p = d?.product;
+        if (p) setRefName(String(locale) === 'zh' ? p.nameZh || p.name : p.name);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attached?.slug, attached?.name, locale]);
+
   const socketRef = useRef<ChatSocket | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   // 兜底发送函数的最新实现（sendFallback 回调注册在长生命周期的 socket 上，
   // 用 ref 避免闭包捕获旧实现）
   const sendViaRestRef = useRef<
-    (clientId: string, text: string | null, imageUrl: string | null, cid?: string, gst?: string) => Promise<void>
+    (
+      clientId: string,
+      text: string | null,
+      imageUrl: string | null,
+      cid?: string,
+      gst?: string,
+      productSlug?: string | null
+    ) => Promise<void>
   >(async () => {});
 
   const upsert = useCallback((m: ChatMsg) => {
@@ -131,7 +205,14 @@ export function ChatWidget() {
       });
       // WS 未在超时内回执（服务端丢弃/断连）→ 用同一 clientId 走 REST 补发（幂等）
       sock.on('sendFallback', (p: any) => {
-        sendViaRestRef.current(p.clientId, p.content ?? null, p.imageUrl ?? null, id, g);
+        sendViaRestRef.current(
+          p.clientId,
+          p.content ?? null,
+          p.imageUrl ?? null,
+          id,
+          g,
+          p.productSlug ?? null
+        );
       });
       sock.connect();
     },
@@ -219,7 +300,7 @@ export function ChatWidget() {
     }
   }
 
-  async function send(text: string | null, imageUrl: string | null) {
+  async function send(text: string | null, imageUrl: string | null, productSlug?: string | null) {
     if (!convId || !guest) return;
     const clientId = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
     const temp: ChatMsg = {
@@ -227,15 +308,16 @@ export function ChatWidget() {
       sender: 'visitor',
       content: text,
       imageUrl,
+      productSlug: productSlug ?? null,
       read: false,
       createdAt: new Date().toISOString(),
       clientId,
     };
     setMessages((prev) => [...prev, temp]);
     scrollBottom();
-    if (!socketRef.current?.sendMessage(text, imageUrl, clientId, convId)) {
+    if (!socketRef.current?.sendMessage(text, imageUrl, clientId, convId, productSlug)) {
       // WS 不可用 → 直接走 REST
-      await sendViaRest(clientId, text, imageUrl);
+      await sendViaRest(clientId, text, imageUrl, undefined, undefined, productSlug);
     }
   }
 
@@ -246,7 +328,8 @@ export function ChatWidget() {
     text: string | null,
     imageUrl: string | null,
     cid?: string,
-    gst?: string
+    gst?: string,
+    productSlug?: string | null
   ) {
     const id = cid || convId;
     const g = gst || guest;
@@ -256,6 +339,7 @@ export function ChatWidget() {
         conversationId: id,
         content: text || undefined,
         imageUrl: imageUrl || undefined,
+        productSlug: productSlug || undefined,
         guest: g,
         clientId,
       });
@@ -271,8 +355,22 @@ export function ChatWidget() {
   function onSend() {
     const v = input.trim();
     if (!v) return;
+    // 访客粘贴的商城链接（常从微信复制）→ 自动识别成商品引用
+    const parsed = parseProductRef(v);
+    // ⚠️ 消息里只要带了链接，就不要再自动附带"当前页面商品"：
+    //    访客明确在聊那个链接，再挂一个当前商品纯属噪音。
+    const hasLink = /https?:\/\/\S+/i.test(v);
+    const slug = parsed?.slug || (!hasLink ? attached?.slug : null);
     setInput('');
-    send(v, null);
+    // 粘贴链接识别出来的商品只用于这一条；页面商品（attached）保持引用
+    if (parsed) setPicked(null);
+    send(v, null, slug);
+  }
+
+  /** 一键把当前商品发给客服（不附带文字，卡片本身就是完整信息） */
+  function sendCurrentProduct() {
+    if (!attached) return;
+    send(null, null, attached.slug);
   }
 
   async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -333,7 +431,10 @@ export function ChatWidget() {
 
       {/* 聊天面板 */}
       {open && (
-        <div className="fixed bottom-5 right-5 z-50 w-[min(92vw,360px)] h-[min(78vh,560px)] bg-surface border border-line shadow-2xl flex flex-col rounded-xl overflow-hidden">
+        <div
+          data-chat-panel="1"
+          className="fixed bottom-5 right-5 z-50 w-[min(92vw,360px)] h-[min(78vh,560px)] bg-surface border border-line shadow-2xl flex flex-col rounded-xl overflow-hidden"
+        >
           {/* 头部 */}
           <div className="flex items-center justify-between px-4 py-3 bg-ink text-white">
             <div className="text-sm font-medium">{t.imTitle}</div>
@@ -417,9 +518,17 @@ export function ChatWidget() {
                             alt=""
                             className="max-w-full rounded-lg max-h-48 object-cover"
                           />
-                        ) : (
+                        ) : m.content ? (
                           <span className="whitespace-pre-wrap break-words">{m.content}</span>
-                        )}
+                        ) : null}
+                        {/* 商品引用 → 渲染成可点击的商品卡片 */}
+                        {m.productSlug ? (
+                          <ChatProductCard
+                            slug={m.productSlug}
+                            locale={locale}
+                            tone={mine ? 'dark' : 'light'}
+                          />
+                        ) : null}
                         <div className={`text-[10px] mt-1 ${mine ? 'text-white/60' : 'text-muted'}`}>
                           {fmtTime(m.createdAt)}
                         </div>
@@ -431,32 +540,64 @@ export function ChatWidget() {
               </div>
 
               {/* 输入区 */}
-              <div className="border-t border-line p-2 flex items-end gap-2">
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                  aria-label={t.imAttach}
-                  className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full border border-line hover:border-ink"
-                >
-                  {uploading ? '…' : '📷'}
-                </button>
-                <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      onSend();
-                    }
-                  }}
-                  rows={1}
-                  placeholder={t.imInputPh}
-                  className="flex-1 resize-none border border-line px-3 py-2 text-sm outline-none focus:border-ink max-h-24"
-                />
-                <button onClick={onSend} className="shrink-0 btn-gold px-4 py-2 text-sm">
-                  {t.imSend}
-                </button>
+              <div className="border-t border-line">
+                {/* 商品引用条：当前商品 / 手动选的商品，可一键发给客服 */}
+                {attached && (
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-line bg-surface">
+                    <span className="shrink-0 text-[10px] tracking-widest text-muted">
+                      {t.imCurrentProduct}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-ink">
+                      {refName || attached.slug}
+                    </span>
+                    <button
+                      onClick={sendCurrentProduct}
+                      aria-label={t.imSendProduct}
+                      title={t.imSendProduct}
+                      className="shrink-0 h-6 px-2 text-[10px] border border-line text-ink hover:border-ink transition-colors"
+                    >
+                      {t.imSendProduct}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPicked(null);
+                        setRefOff(true);
+                      }}
+                      aria-label={t.imRemoveRef}
+                      title={t.imRemoveRef}
+                      className="shrink-0 w-5 h-5 flex items-center justify-center text-muted hover:text-ink"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+                <div className="p-2 flex items-end gap-2">
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading}
+                    aria-label={t.imAttach}
+                    className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full border border-line hover:border-ink"
+                  >
+                    {uploading ? '…' : '📷'}
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
+                  <textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        onSend();
+                      }
+                    }}
+                    rows={1}
+                    placeholder={t.imInputPh}
+                    className="flex-1 resize-none border border-line px-3 py-2 text-sm outline-none focus:border-ink max-h-24"
+                  />
+                  <button onClick={onSend} className="shrink-0 btn-gold px-4 py-2 text-sm">
+                    {t.imSend}
+                  </button>
+                </div>
               </div>
             </>
           )}

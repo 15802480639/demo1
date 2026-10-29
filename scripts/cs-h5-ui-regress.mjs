@@ -143,8 +143,17 @@ async function main() {
     check('③C H5 登录成功进入工作台', cs.url().endsWith('/cs'), cs.url());
 
     // ---------- ④ WS 已连接 ----------
+    // ⚠️ dev 模式下 React StrictMode 会双重挂载 → 首次 WS 连接被 cleanup 掐断，
+    //    触发退避重连（2s 起）。固定 sleep 判断必然误报 → 必须等「已连接」真的出现。
+    const connOk = await cs
+      .locator('header')
+      .first()
+      .getByText('已连接')
+      .waitFor({ timeout: 25000 })
+      .then(() => true)
+      .catch(() => false);
     const headerText = await cs.locator('header').first().innerText().catch(() => '');
-    check('④ 顶部显示已连接', headerText.includes('已连接'), headerText.replace(/\n/g, ' '));
+    check('④ 顶部显示已连接', connOk, headerText.replace(/\n/g, ' '));
 
     // ---------- ⑤ 访客发消息 → H5 列表出现 ----------
     await visitor.goto(`${BASE}/zh`, { waitUntil: 'domcontentloaded' });
@@ -173,6 +182,8 @@ async function main() {
     await visitor.locator('button', { hasText: '发送' }).first().click();
     await visitor.waitForTimeout(3500);
 
+    // 会话列表靠 3 秒轮询刷新，先等列表真的出现
+    await cs.locator('main button').first().waitFor({ timeout: 25000 }).catch(() => {});
     const listText = await cs.locator('main').first().innerText().catch(() => '');
     check(
       '⑤A H5 列表出现访客会话',

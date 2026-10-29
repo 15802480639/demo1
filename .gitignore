@@ -67,6 +67,9 @@ qa-shots/
 preview-mail-*.html
 _review-shots/
 
+# 聊天测试上传的一次性图片（不入库）
+public/uploads/chat/
+
 # 部署产物（本地构建的传输包，不进仓库）
 webshopp-*.tar.gz
 

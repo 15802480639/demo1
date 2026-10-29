@@ -188,13 +188,21 @@ async function isAgentActive(agentId) {
   return !!(r.rows[0] && r.rows[0].active);
 }
 
-async function insertMessage(conversationId, sender, content, imageUrl, clientId, sentByStaffId) {
+async function insertMessage(
+  conversationId,
+  sender,
+  content,
+  imageUrl,
+  clientId,
+  sentByStaffId,
+  productSlug
+) {
   // 幂等：同一 conversationId + clientId 只落一条（WS 与 REST 双通道可能重复提交）
   const r = await pool.query(
-    `INSERT INTO "ChatMessage" ("id", "conversationId", "sender", "content", "imageUrl", "clientId", "sentByStaffId", "read", "createdAt")
-     VALUES ($1, $2, $3, $4, $5, $6, $7, false, now())
+    `INSERT INTO "ChatMessage" ("id", "conversationId", "sender", "content", "imageUrl", "clientId", "sentByStaffId", "productSlug", "read", "createdAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, now())
      ON CONFLICT ("conversationId", "clientId") DO NOTHING
-     RETURNING "id", "sender", "content", "imageUrl", "read", "clientId", "seq",
+     RETURNING "id", "sender", "content", "imageUrl", "productSlug", "read", "clientId", "seq",
                ${ISO_UTC_SQL('"createdAt"')} AS "createdAtIso"`,
     [
       crypto.randomUUID(),
@@ -204,6 +212,7 @@ async function insertMessage(conversationId, sender, content, imageUrl, clientId
       imageUrl ?? null,
       clientId ?? crypto.randomUUID(),
       sentByStaffId ?? null,
+      productSlug ?? null,
     ]
   );
 
@@ -211,7 +220,7 @@ async function insertMessage(conversationId, sender, content, imageUrl, clientId
   if (!row) {
     // 冲突（重复提交）→ 取回已存在的那条
     const dup = await pool.query(
-      `SELECT "id", "sender", "content", "imageUrl", "read", "clientId", "seq",
+      `SELECT "id", "sender", "content", "imageUrl", "productSlug", "read", "clientId", "seq",
               ${ISO_UTC_SQL('"createdAt"')} AS "createdAtIso"
        FROM "ChatMessage" WHERE "conversationId" = $1 AND "clientId" = $2`,
       [conversationId, clientId]
@@ -224,6 +233,7 @@ async function insertMessage(conversationId, sender, content, imageUrl, clientId
       sender: row.sender,
       content: row.content,
       imageUrl: row.imageUrl,
+      productSlug: row.productSlug,
       read: row.read,
       createdAt: row.createdAtIso,
       seq: row.seq,
@@ -242,6 +252,7 @@ async function insertMessage(conversationId, sender, content, imageUrl, clientId
     sender: row.sender,
     content: row.content,
     imageUrl: row.imageUrl,
+    productSlug: row.productSlug,
     read: row.read,
     createdAt: row.createdAtIso,
     seq: row.seq,
@@ -362,7 +373,8 @@ async function broadcastMessage(conversationId, message) {
     await broadcastConvUpdate(conversationId, {
       lastMessageAt: message.createdAt,
       lastSender: message.sender,
-      lastPreview: message.content || (message.imageUrl ? '[image]' : ''),
+      lastPreview:
+        message.content || (message.imageUrl ? '[image]' : message.productSlug ? '[商品]' : ''),
     });
   } catch {
     /* 统计失败不影响消息推送 */
@@ -572,7 +584,16 @@ wss.on('connection', (ws, req) => {
         const sentByStaffId = ws.meta.role === 'visitor' ? null : ws.meta.staffId;
         const content = typeof msg.content === 'string' ? msg.content.slice(0, 4000) : null;
         const imageUrl = typeof msg.imageUrl === 'string' ? msg.imageUrl.slice(0, 2000) : null;
-        if (!content && !imageUrl) {
+        // 附带的商品引用（访客把商品发给客服）：只保留合法 slug 字符
+        const productSlug =
+          typeof msg.productSlug === 'string'
+            ? msg.productSlug
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9_-]/g, '')
+                .slice(0, 81) || null
+            : null;
+        if (!content && !imageUrl && !productSlug) {
           send(ws, { type: 'error', message: 'EMPTY_MESSAGE' });
           return;
         }
@@ -583,7 +604,8 @@ wss.on('connection', (ws, req) => {
           content,
           imageUrl,
           clientId,
-          sentByStaffId
+          sentByStaffId,
+          productSlug
         );
         if (!message) {
           send(ws, { type: 'error', message: 'INSERT_FAILED' });
@@ -602,7 +624,7 @@ wss.on('connection', (ws, req) => {
         await broadcastConvUpdate(conversationId, {
           lastMessageAt: message.createdAt,
           lastSender: sender,
-          lastPreview: content || (imageUrl ? '[image]' : ''),
+          lastPreview: content || (imageUrl ? '[image]' : productSlug ? '[商品]' : ''),
         });
         return;
       }

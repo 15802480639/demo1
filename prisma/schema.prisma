@@ -596,6 +596,10 @@ model ChatMessage {
   content        String?
   /// 图片 URL（OSS 或 /uploads 本地），文本消息为空
   imageUrl       String?
+  /// 引用的商品 slug（访客把商品发给客服时携带）。
+  /// 为空 = 普通消息；有值 = 这条消息附带一个商品，客服端渲染成可点击的商品卡片。
+  /// 只存 slug 不存快照 —— 价格/库存以客服端实时查询为准，避免展示过期报价。
+  productSlug    String?
   /// 客户端生成的幂等键：WS 与 REST 兜底重复提交时按此去重，避免重复落库。
   /// 用 DB 级默认值，迁移才能安全加到已有表（Prisma 层默认值会阻止 ALTER）。
   clientId       String           @default(dbgenerated("gen_random_uuid()"))

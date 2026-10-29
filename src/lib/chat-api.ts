@@ -41,6 +41,8 @@ export async function sendMessageRest(data: {
   conversationId: string;
   content?: string;
   imageUrl?: string;
+  /** 附带的商品 slug（访客把商品发给客服时携带） */
+  productSlug?: string;
   guest?: string;
   clientId?: string;
 }) {

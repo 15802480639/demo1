@@ -10,6 +10,7 @@ import {
   markRead,
   setStatus,
 } from '@/lib/chat-api';
+import { ChatProductCard } from '@/components/chat/chat-product-card';
 
 type Conv = {
   id: string;
@@ -444,9 +445,13 @@ export function ChatAdmin() {
                           {m.imageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={m.imageUrl} alt="" className="max-w-full rounded-lg max-h-48 object-cover" />
-                          ) : (
+                          ) : m.content ? (
                             <span className="whitespace-pre-wrap break-words">{m.content}</span>
-                          )}
+                          ) : null}
+                          {/* 访客发来的商品 → 可点击的商品卡片（价格实时查，不存快照） */}
+                          {m.productSlug ? (
+                            <ChatProductCard slug={m.productSlug} locale={sel?.locale} tone="light" />
+                          ) : null}
                           <div className={`text-[10px] mt-1 ${mine ? 'text-white/60' : 'text-muted'}`}>
                             {fmtTime(m.createdAt)}
                           </div>

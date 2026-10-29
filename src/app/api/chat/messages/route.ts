@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { isoUtcSql } from '@/lib/chat-time';
 import { broadcastChatMessage } from '@/lib/chat-broadcast';
 import { resolveStaff } from '@/lib/chat-staff';
+import { normalizeSlug } from '@/lib/chat-product';
 
 // POST /api/chat/messages —— 兜底发送（主路径是 WebSocket，断线时由前端用此接口 + 轮询）
 // 客服（admin/agent）或会话所属访客均可调用。返回落库后的消息。
@@ -18,9 +19,11 @@ export async function POST(req: NextRequest) {
   const conversationId = String(body.conversationId || '');
   const content = typeof body.content === 'string' ? body.content.slice(0, 4000).trim() : '';
   const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.slice(0, 2000) : '';
+  // 附带的商品引用（访客把商品发给客服）：只保留合法 slug 字符
+  const productSlug = normalizeSlug(String(body.productSlug || '')) || null;
   const clientId =
     typeof body.clientId === 'string' && body.clientId.trim() ? body.clientId.trim() : undefined;
-  if (!conversationId || (!content && !imageUrl)) {
+  if (!conversationId || (!content && !imageUrl && !productSlug)) {
     return NextResponse.json({ error: 'EMPTY_MESSAGE' }, { status: 400 });
   }
 
@@ -69,6 +72,7 @@ export async function POST(req: NextRequest) {
           sender: existing.sender,
           content: existing.content,
           imageUrl: existing.imageUrl,
+          productSlug: existing.productSlug,
           read: existing.read,
           createdAt: row?.createdAt ?? existing.createdAt,
           clientId: existing.clientId,
@@ -85,6 +89,7 @@ export async function POST(req: NextRequest) {
       sender,
       content: content || null,
       imageUrl: imageUrl || null,
+      productSlug,
       sentByStaffId,
       ...(clientId ? { clientId } : {}),
     },
@@ -105,6 +110,7 @@ export async function POST(req: NextRequest) {
     sender: msg.sender,
     content: msg.content,
     imageUrl: msg.imageUrl,
+    productSlug: msg.productSlug,
     read: msg.read,
     createdAt: row?.createdAt ?? msg.createdAt,
     clientId: msg.clientId,

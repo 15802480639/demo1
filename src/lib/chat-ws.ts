@@ -8,6 +8,8 @@ export type ChatMsg = {
   sender: 'visitor' | 'admin' | 'system';
   content?: string | null;
   imageUrl?: string | null;
+  /** 附带的商品 slug（访客把商品发给客服时携带）；两端据此渲染商品卡片 */
+  productSlug?: string | null;
   read: boolean;
   createdAt: string;
   clientId?: string | null;
@@ -196,10 +198,12 @@ export class ChatSocket {
     content: string | null,
     imageUrl: string | null,
     clientId: string,
-    conversationId?: string | null
+    conversationId?: string | null,
+    productSlug?: string | null
   ) {
     const payload: any = { type: 'message', content, imageUrl, clientId };
     if (conversationId) payload.conversationId = conversationId;
+    if (productSlug) payload.productSlug = productSlug;
 
     const ok = this.send(payload);
     if (!ok) return false;
@@ -213,7 +217,13 @@ export class ChatSocket {
     if (!this.pendingAcks.has(clientId)) {
       const timer = setTimeout(() => {
         this.pendingAcks.delete(clientId);
-        this.emit('sendFallback', { clientId, content, imageUrl, conversationId });
+        this.emit('sendFallback', {
+          clientId,
+          content,
+          imageUrl,
+          conversationId,
+          productSlug,
+        });
       }, 3000);
       this.pendingAcks.set(clientId, timer);
     }

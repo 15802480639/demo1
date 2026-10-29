@@ -32,6 +32,8 @@ export async function broadcastChatMessage(
     sender: string;
     content?: string | null;
     imageUrl?: string | null;
+    /** 附带的商品 slug（访客把商品发给客服时携带） */
+    productSlug?: string | null;
     read: boolean;
     createdAt: string;
     clientId?: string | null;
