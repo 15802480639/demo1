@@ -784,6 +784,8 @@ export type AdminDict = {
   spKakaoStatus: string;
   spKakaoOn: string;
   spKakaoOff: string;
+  spKakaoFabLabel: string;
+  spKakaoFabHint: string;
   spOgImagePh: string;
   spSameAsHint: string;
   spIndexNowTitle: string;
@@ -1720,6 +1722,8 @@ const ko: Dict = {
     spKakaoStatus: '현재 상태:',
     spKakaoOn: '활성화됨 — 한국어 상품 페이지 주 버튼이 「Kakao 상담」',
     spKakaoOff: '미설정 — 「장바구니 / 바로 구매」 유지',
+    spKakaoFabLabel: 'Kakao 플로팅 버튼 표시',
+    spKakaoFabHint: '기본값은 꺼짐입니다. 사이트 내 실시간 상담 버튼(우측 하단 검은색)과 위치가 겹치므로, 켜면 두 버튼이 같은 자리에 겹쳐 보입니다. 이 스위치는 우측 하단 Kakao 플로팅 버튼만 제어하며, 상품 페이지의 「Kakao 상담」 버튼에는 영향을 주지 않습니다.',
     spOgImagePh: 'https://…(권장 1200×630)',
     spSameAsHint: '공식 계정 링크는 Organization JSON-LD의 sameAs 필드로 출력됩니다 — 브랜드와 서드파티 계정을 연결하는 유일한 핵심 근거입니다. ⚠️ http(s)로 시작하는 실제 주소만 입력하세요. \'#\'는 자동 제거됩니다. 최소 2개 입력을 권장합니다.',
     spIndexNowTitle: 'IndexNow(즉시 색인)',
@@ -2647,6 +2651,8 @@ const zh: Dict = {
     spKakaoStatus: '当前状态：',
     spKakaoOn: '已启用 —— 韩语商品页主按钮为「Kakao 상담」',
     spKakaoOff: '未配置 —— 保持「加入购物车 / 立即购买」',
+    spKakaoFabLabel: '显示 Kakao 悬浮按钮',
+    spKakaoFabHint: '默认关闭。站内实时客服按钮（右下角黑色）和它位置重叠，打开后两个按钮会叠在同一个位置。这个开关只控制右下角的 Kakao 悬浮按钮，不影响商品页的「Kakao 상담」主按钮。',
     spOgImagePh: 'https://…（建议 1200×630）',
     spSameAsHint: '官方账号链接，会输出为 Organization JSON-LD 的 sameAs 字段 —— 这是把品牌与第三方账号绑定的唯一硬证据。⚠️ 只填 http(s) 开头的真实地址，填 \'#\' 会被自动剔除。至少填 2 个。',
     spIndexNowTitle: 'IndexNow（即时收录）',
@@ -3575,6 +3581,8 @@ const en: Dict = {
     spKakaoStatus: 'Current status:',
     spKakaoOn: 'Enabled — the Korean product page main button shows 「Kakao 상담」',
     spKakaoOff: 'Not configured — keeps 「Add to cart / Buy now」',
+    spKakaoFabLabel: 'Show Kakao floating button',
+    spKakaoFabHint: 'Off by default. It overlaps the in-site live chat button (black, bottom right) — turning it on stacks both buttons in the same spot. This switch only controls the bottom-right Kakao floating button; it does not affect the 「Kakao 상담」 button on product pages.',
     spOgImagePh: 'https://… (1200×630 recommended)',
     spSameAsHint: 'Official account links are output as the sameAs field of Organization JSON-LD — the only hard evidence tying the brand to third-party accounts. ⚠️ Only real http(s) URLs; \'#\' is auto-stripped. At least 2 recommended.',
     spIndexNowTitle: 'IndexNow (instant indexing)',

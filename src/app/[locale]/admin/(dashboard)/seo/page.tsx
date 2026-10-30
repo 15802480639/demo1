@@ -48,6 +48,9 @@ const SOCIAL_KEYS = [
 
 const INDEXNOW_KEY = 'indexnow_key';
 
+/** 右下角 Kakao 悬浮球开关（2026-10-30 新增，见 src/lib/kakao.ts 的 isKakaoFabEnabled） */
+const KAKAO_FAB_KEY = 'kakao_fab_enabled';
+
 /**
  * 双键名映射：库里既存的点号键（seo.gaId 等）与新后台下划线键并存。
  * 读取时合并，让子建在后台看到的是**已有真实值**，而不是一片空白
@@ -99,6 +102,7 @@ export default function AdminSeoPage() {
           ...COMPANY_KEYS,
           ...SOCIAL_KEYS,
           INDEXNOW_KEY,
+          KAKAO_FAB_KEY,
         ]) {
           init[k] = s[k] ?? '';
         }
@@ -314,6 +318,23 @@ export default function AdminSeoPage() {
                 ? t.spKakaoOn
                 : t.spKakaoOff}
             </p>
+          </div>
+
+          {/* ⚠️ 2026-10-30 新增：右下角 Kakao 悬浮球开关。
+              站内实时客服 IM（黑色按钮）上线后，两者定位重合会叠在一起，
+              子建拍板「前台只留黑色实时客服」→ 悬浮球默认关闭，后台可随时放回来。
+              这个开关只管右下角悬浮球，商品页「Kakao 상담」主按钮不受影响。 */}
+          <div className="mt-4 border border-line p-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.kakao_fab_enabled === '1'}
+                onChange={(e) => set('kakao_fab_enabled', e.target.checked ? '1' : '0')}
+                className="w-4 h-4"
+              />
+              <span className="text-ink font-medium">{t.spKakaoFabLabel}</span>
+            </label>
+            <p className="text-xs text-muted mt-2">{t.spKakaoFabHint}</p>
           </div>
         </Section>
 
