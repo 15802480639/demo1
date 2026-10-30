@@ -27,19 +27,48 @@ export type ProductRef = {
   locale: Locale | null;
 };
 
-/** 本站域名（含可能的历史域名），用于判断一个完整 URL 是不是本站的 */
+/**
+ * 本站域名（含可能的历史域名），用于判断一个完整 URL 是不是本站的。
+ *
+ * ⚠️ 2026-10-30：不能只认 siteConfig.url 写死的那一个域名。
+ *   实际部署中同一个站会有多个入口（正式域名 mk.golf / 裸域 / IP 直访 / 本地预览），
+ *   访客从哪个入口复制链接，就要能从哪个入口识别出商品引用，
+ *   否则「粘贴链接自动识别商品」在非主域入口上直接失效。
+ */
 function isOwnHost(host: string): boolean {
   if (!host) return false;
   const h = host.toLowerCase();
-  const own = siteConfig.url
+  const hosts = ownHosts();
+  if (hosts.has(h)) return true;
+  // 允许子域（www. 与裸域互认）
+  const bare = h.replace(/^www\./, '');
+  for (const own of hosts) {
+    const o = own.replace(/^www\./, '');
+    if (bare === o || bare.endsWith('.' + o)) return true;
+  }
+  return false;
+}
+
+/**
+ * 本站主机名集合 = 配置里的域名 + 当前浏览器实际访问的主机。
+ *
+ * - 配置域名：siteConfig.url（构建期内联，可能是正式域名）
+ * - 当前主机：window.location.host —— 用户此刻真实在用的入口
+ *   （IP 直访、hosts 覆盖、预览地址、备用域名……）
+ *
+ * 服务端渲染时没有 window，只用配置域名（够用：服务端不识别访客粘贴的链接）。
+ */
+function ownHosts(): Set<string> {
+  const set = new Set<string>();
+  const cfg = siteConfig.url
     .replace(/^https?:\/\//, '')
     .split('/')[0]
     .toLowerCase();
-  if (h === own) return true;
-  // 允许子域（www. 与裸域互认）
-  const bare = own.replace(/^www\./, '');
-  const hb = h.replace(/^www\./, '');
-  return hb === bare || hb.endsWith('.' + bare);
+  if (cfg) set.add(cfg);
+  if (typeof window !== 'undefined' && window.location?.host) {
+    set.add(window.location.host.toLowerCase());
+  }
+  return set;
 }
 
 /**

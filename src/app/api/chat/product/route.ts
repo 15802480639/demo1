@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { urlProduct } from '@/lib/urls';
+import { urlProduct, urlProductPath } from '@/lib/urls';
 import { normalizeSlug, isLocale } from '@/lib/chat-product';
 import { defaultLocale } from '@/i18n/config';
 
@@ -20,7 +20,10 @@ type Card = {
   price: number;
   currency: string;
   image: string | null;
+  /** 绝对 URL —— 仅供 SEO / 分享场景参考 */
   url: string;
+  /** 站内相对路径 —— 卡片点击跳转用（跟随当前访问主机，不会跳到失效域名） */
+  path: string;
   inStock: boolean;
   stock: number;
 };
@@ -82,6 +85,9 @@ export async function GET(req: NextRequest) {
         image,
         // ⚠️ 链接一律走 urls.ts 的 urlProduct()，禁止手拼（漏 locale 段会 404）
         url: urlProduct(p.slug, locale),
+        // 点击跳转用相对路径：跟随用户当前访问的主机，
+        // 避免 www.mk.golf 之类的对外域名失效时链接点不开（2026-10-30 实测）
+        path: urlProductPath(p.slug, locale),
         inStock: stock > 0,
         stock,
       };

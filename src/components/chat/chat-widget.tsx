@@ -14,6 +14,7 @@ import {
 } from '@/lib/chat-api';
 import { parseProductRef, productRefFromPath } from '@/lib/chat-product';
 import { ChatProductCard } from '@/components/chat/chat-product-card';
+import { ChatMessageText } from '@/components/chat/chat-message-text';
 
 const LS_ID = 'chat_conv_id';
 const LS_GUEST = 'chat_guest';
@@ -600,7 +601,7 @@ export function ChatWidget() {
                             className="max-w-full rounded-lg max-h-48 object-cover"
                           />
                         ) : m.content ? (
-                          <span className="whitespace-pre-wrap break-words">{m.content}</span>
+                          <ChatMessageText content={m.content} />
                         ) : null}
                         {/* 商品引用 → 渲染成可点击的商品卡片 */}
                         {m.productSlug ? (

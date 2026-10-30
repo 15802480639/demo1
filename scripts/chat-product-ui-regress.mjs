@@ -206,9 +206,16 @@ async function main() {
     await ta.fill('https://example.com/products/some-other-item');
     await visitor.locator('div[data-chat-panel] button', { hasText: '发送' }).first().click();
     await visitor.waitForTimeout(2000);
-    // 只数聊天浮窗里的卡片（商品页底部还有"相关商品"链接，不能混进来）
-    const cards = await visitor.locator('div[data-chat-panel] a[href*="/products/"]').count();
-    check('⑦A 外站链接不生成商品卡片', cards === 2, `浮窗内卡片数 ${cards}（应为 2）`);
+    // 只数聊天浮窗里的**商品卡片**（ChatProductCard 带商品图）
+    // ⚠️ 不能只按 a[href*="/products/"] 数：正文里的外站链接现在也会渲染成 <a>
+    //    （2026-10-30 起正文 URL 可点击），它是普通链接不是商品卡片
+    const cards = await visitor.locator('div[data-chat-panel] a[href*="/products/"]:has(img)').count();
+    check('⑦A 外站链接不生成商品卡片', cards === 2, `浮窗内商品卡片数 ${cards}（应为 2）`);
+
+    // 外站链接本身应可点击且保持原样
+    const extLink = visitor.locator('div[data-chat-panel] a[href="https://example.com/products/some-other-item"]').first();
+    const extCount = await extLink.count();
+    check('⑦B 正文里的外站链接可点击', extCount > 0, extCount > 0 ? `找到 ${extCount} 个` : '未找到外站链接');
 
     // ---------- 控制台无报错 ----------
     const realErrors = vErrors.filter(

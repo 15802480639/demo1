@@ -22,6 +22,8 @@ export type ProductCardData = {
   currency: string;
   image: string | null;
   url: string;
+  /** 站内相对路径 —— 优先用于点击跳转（跟随当前主机） */
+  path?: string;
   inStock: boolean;
   stock: number;
 };
@@ -128,7 +130,11 @@ export function ChatProductCard({
 
   return (
     <a
-      href={data.url}
+      // ⚠️ 优先用站内相对路径：跟随用户当前访问的主机。
+      //    写死 https://www.mk.golf/... 时，若该域名 DNS/证书失效，
+      //    客服点卡片就是 ERR_QUIC_PROTOCOL_ERROR，商品页完全打不开。
+      //    后端没给 path 时（旧缓存）才退回绝对 URL。
+      href={data.path || data.url}
       target="_blank"
       rel="noopener noreferrer"
       className={`mt-1.5 flex items-center gap-2.5 rounded-lg border p-2 transition hover:opacity-90 ${

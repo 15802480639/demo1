@@ -12,6 +12,7 @@ import {
   uploadImage,
 } from '@/lib/chat-api';
 import { ChatProductCard } from '@/components/chat/chat-product-card';
+import { ChatMessageText } from '@/components/chat/chat-message-text';
 import { csDict } from '@/lib/cs-dict';
 
 // H5 客服工作台 —— 手机单栏版
@@ -484,7 +485,7 @@ export function ChatAgentMobile() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={m.imageUrl} alt="" className="max-w-full rounded-lg max-h-48 object-cover" />
                   ) : m.content ? (
-                    <span className="whitespace-pre-wrap break-words">{m.content}</span>
+                    <ChatMessageText content={m.content} />
                   ) : null}
                   {/* 访客发来的商品 → 可点击的商品卡片（价格实时查，不存快照）
                       ⚠️ 客服是韩国人 → 卡片文案与商品名固定韩文，不跟访客语种走 */}

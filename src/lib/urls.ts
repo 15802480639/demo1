@@ -19,6 +19,23 @@ export const urlHome = (locale: Locale = defaultLocale) => `${baseUrl()}/${local
 export const urlProduct = (slug: string, locale: Locale = defaultLocale) =>
   `${baseUrl()}/${locale}/products/${slug}`;
 
+/**
+ * 商品详情 —— **站内相对路径**（不带域名）。
+ *
+ * ⚠️ 为什么聊天里的商品链接要用相对路径而不是 urlProduct()？
+ *   2026-10-30 实测踩坑：对外域名 www.mk.golf 的 DNS 指向一台已下线的韩国主机
+ *   （27.102.137.133），源站又只有 80 端口没有 443 → 写死的
+ *   `https://www.mk.golf/zh/products/xxx` 一点就是 ERR_QUIC_PROTOCOL_ERROR，
+ *   客服/访客完全打不开商品页。
+ *   用相对路径 `/zh/products/xxx` 则自动跟随当前访问的主机，
+ *   无论用户是走域名、IP 还是别的入口，点开都是当前站的同一个商品页。
+ *
+ *   ⚠️ 仅用于「站内跳转按钮」。SEO 的 canonical / sitemap / llms.txt
+ *      仍必须用绝对 URL（urlProduct），相对路径给搜索引擎是不合格的。
+ */
+export const urlProductPath = (slug: string, locale: Locale = defaultLocale) =>
+  `/${locale}/products/${slug}`;
+
 /** 商品列表（可带筛选参数） */
 export const urlProducts = (
   locale: Locale = defaultLocale,
