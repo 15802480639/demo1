@@ -49,8 +49,8 @@ async function main() {
   await dp.waitForTimeout(3000);
   await dp.screenshot({ path: path.join(OUT, '03-shop-home.png'), timeout: 15000 }).catch(() => {});
 
-  // 点开聊天浮球
-  const bubble = dp.locator('button[aria-label*="咨询"], button[aria-label*="상담"], [data-chat-trigger], .chat-fab').first();
+  // 点开聊天浮球（aria-label = imTitle，中文「实时客服」/ 韩文「실시간 상담」）
+  const bubble = dp.locator('button[aria-label="实时客服"], button[aria-label="실시간 상담"]').first();
   const hasBubble = (await bubble.count()) > 0;
   console.log('③ 聊天浮球存在:', hasBubble);
   if (hasBubble) {
@@ -62,7 +62,10 @@ async function main() {
       console.log('   未登录浮窗文案:', t.replace(/\n+/g, ' | ').slice(0, 200));
       console.log('   含登录引导:', /登录|로그인/.test(t));
       console.log('   含注册引导:', /注册|회원가입/.test(t));
-      console.log('   有输入框(应为无):', await panel.locator('textarea').count());
+      console.log('   有输入框(应为 0):', await panel.locator('textarea').count());
+      console.log('   有「开始对话」按钮(应为 0):', await panel.locator('button', { hasText: /开始对话|대화 시작|Start chat/ }).count());
+    } else {
+      console.log('   ❌ 未找到 data-chat-panel');
     }
     await dp.screenshot({ path: path.join(OUT, '04-chat-widget-gate.png'), timeout: 15000 }).catch(() => {});
   }
