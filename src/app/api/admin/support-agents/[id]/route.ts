@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, HttpError } from '@/lib/auth';
+import { requirePermission, HttpError } from '@/lib/auth';
 import { hashCsPassword } from '@/lib/cs-auth';
+import { logAudit, clientIp, actorFromSession } from '@/lib/audit';
+import { AGENT_ROLES, AGENT_ROLE_LABELS, normalizeAgentRole } from '@/lib/permissions';
 
 // PATCH /api/admin/support-agents/[id] —— 改密码 / 改名 / 启用停用
 // DELETE /api/admin/support-agents/[id] —— 删除账号
@@ -15,11 +17,13 @@ function fail(e: unknown) {
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requirePermission('agents.manage');
   } catch (e) {
     return fail(e);
   }
+  const actor = actorFromSession({ ...session, staffRole: session.staffRole ?? 'owner' });
 
   const { id } = await params;
   const agent = await prisma.chatAgent.findUnique({ where: { id } });
@@ -39,6 +43,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (typeof body.active === 'boolean') {
     data.active = body.active;
   }
+  // 客服权限档位（客服之间也分权：只接待 / 可查订单 / 可处理订单）
+  if (typeof body.permissions === 'string') {
+    const p = body.permissions.trim();
+    if (p && !(AGENT_ROLES as readonly string[]).includes(p)) {
+      return NextResponse.json({ error: 'bad_permissions' }, { status: 400 });
+    }
+    data.permissions = normalizeAgentRole(p);
+  }
   if (typeof body.password === 'string' && body.password) {
     if (body.password.length < 6) {
       return NextResponse.json({ error: 'weak_password' }, { status: 400 });
@@ -53,14 +65,60 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updated = await prisma.chatAgent.update({
     where: { id },
     data,
-    select: { id: true, username: true, displayName: true, active: true },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      active: true,
+      permissions: true,
+    },
   });
+
+  // ---- 操作日志 ----
+  const changes: string[] = [];
+  if (data.displayName && data.displayName !== agent.displayName) {
+    changes.push(`이름 ${agent.displayName} → ${data.displayName}`);
+  }
+  if (typeof data.active === 'boolean' && data.active !== agent.active) {
+    changes.push(`상태 ${agent.active ? '재직' : '퇴직'} → ${data.active ? '재직' : '퇴직'}`);
+  }
+  if (data.permissions && data.permissions !== agent.permissions) {
+    changes.push(
+      `권한 ${agent.permissions} → ${data.permissions}`
+    );
+  }
+  if (data.passwordHash) changes.push('비밀번호 변경');
+  if (changes.length) {
+    await logAudit({
+      action: 'agent.update',
+      actor,
+      targetType: 'agent',
+      targetId: id,
+      summary: `상담원 계정 수정: ${agent.username} (${changes.join(', ')})`,
+      detail: {
+        username: agent.username,
+        from: {
+          displayName: agent.displayName,
+          active: agent.active,
+          permissions: agent.permissions,
+        },
+        to: {
+          displayName: updated.displayName,
+          active: updated.active,
+          permissions: updated.permissions,
+        },
+        label: AGENT_ROLE_LABELS[normalizeAgentRole(updated.permissions)],
+      },
+      ip: clientIp(req),
+    });
+  }
+
   return NextResponse.json({ ok: true, agent: updated });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin();
+    await requirePermission('agents.manage');
   } catch (e) {
     return fail(e);
   }

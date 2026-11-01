@@ -11,6 +11,7 @@ import {
   sendMessageRest,
   markRead,
   uploadImage,
+  linkOrder,
 } from '@/lib/chat-api';
 import { parseProductRef, productRefFromPath } from '@/lib/chat-product';
 import { ChatProductCard } from '@/components/chat/chat-product-card';
@@ -21,6 +22,8 @@ const LS_GUEST = 'chat_guest';
 
 /** 商品页「咨询此商品」按钮派发的自定义事件名 */
 const ASK_PRODUCT_EVENT = 'chat:ask-product';
+/** 订单详情页「就这单咨询客服」按钮派发的自定义事件名 */
+const ASK_ORDER_EVENT = 'chat:ask-order';
 
 type ProductRefLite = { slug: string; name?: string };
 
@@ -110,6 +113,12 @@ export function ChatWidget() {
   // 引用条上显示的名字（从 /api/chat/product 拿真实商品名）
   const [refName, setRefName] = useState<string>('');
 
+  // ============ 订单引用（访客从订单详情页发起咨询） ============
+  // 订单号只在建会话时用一次；已建会话时走 linkOrder 补挂。
+  const [pendingOrder, setPendingOrder] = useState<{ orderNo: string } | null>(null);
+  // 当前会话已关联的订单（用于面板内显示）
+  const [linkedOrder, setLinkedOrder] = useState<string | null>(null);
+
   const attached: ProductRefLite | null = refOff
     ? null
     : picked ?? (pathProduct ? { slug: pathProduct.slug } : null);
@@ -119,7 +128,6 @@ export function ChatWidget() {
     setPicked(null);
     setRefOff(false);
   }, [pathname]);
-
   // 登录/注册回跳时带 ?chat=1 → 自动打开浮窗，让客户接着咨询
   useEffect(() => {
     if (isAdmin) return;
@@ -153,6 +161,30 @@ export function ChatWidget() {
     window.addEventListener(ASK_PRODUCT_EVENT, onAsk);
     return () => window.removeEventListener(ASK_PRODUCT_EVENT, onAsk);
   }, []);
+
+  // 订单详情页「就这单咨询客服」→ 打开浮窗并带上订单号
+  // ⚠️ 若会话已存在（访客之前就咨询过），不能再建新会话（会重复），
+  //    而是直接把订单挂到已有会话上。
+  useEffect(() => {
+    function onAskOrder(e: Event) {
+      const detail = (e as CustomEvent<{ orderNo: string }>)?.detail;
+      const orderNo = String(detail?.orderNo ?? '').trim();
+      if (!orderNo) return;
+      setOpen(true);
+      setPendingOrder({ orderNo });
+      setLinkedOrder(orderNo);
+    }
+    window.addEventListener(ASK_ORDER_EVENT, onAskOrder);
+    return () => window.removeEventListener(ASK_ORDER_EVENT, onAskOrder);
+  }, []);
+
+  // pendingOrder 有值但会话还没建 → 建会话时带上订单号
+  useEffect(() => {
+    if (!convId || !guest || !pendingOrder) return;
+    linkOrder(convId, pendingOrder.orderNo, guest)
+      .then(() => setPendingOrder(null))
+      .catch(() => {});
+  }, [convId, guest, pendingOrder]);
 
   // 引用条商品名：取一次即可（接口有 60 秒缓存）
   useEffect(() => {
@@ -281,7 +313,12 @@ export function ChatWidget() {
   useEffect(() => {
     if (!convId || !guest) return;
     getConversation(convId, guest)
-      .then((d) => setMessages(d.messages || []))
+      .then((d) => {
+        setMessages(d.messages || []);
+        // 已有会话若挂着订单，面板头部显示出来
+        const o = d.conversation?.order;
+        if (o?.orderNo) setLinkedOrder(String(o.orderNo));
+      })
       .catch(() => {});
     setupSocket(convId, guest);
     return () => socketRef.current?.close();
@@ -334,12 +371,15 @@ export function ChatWidget() {
         contactType,
         contact: contact.trim() || undefined,
         locale,
+        // 订单页发起咨询时带上订单号（后端校验订单归属）
+        orderNo: pendingOrder?.orderNo,
       });
       setConvId(d.id);
       setGuest(d.guestToken);
       localStorage.setItem(lsKey(LS_ID, user?.id ?? null), d.id);
       localStorage.setItem(lsKey(LS_GUEST, user?.id ?? null), d.guestToken);
       setMessages([]);
+      setPendingOrder(null);
       setupSocket(d.id, d.guestToken);
     } catch {
       alert(t.imStartFailed);
@@ -491,7 +531,17 @@ export function ChatWidget() {
         >
           {/* 头部 */}
           <div className="flex items-center justify-between px-4 py-3 bg-ink text-white">
-            <div className="text-sm font-medium">{t.imTitle}</div>
+            <div className="text-sm font-medium flex items-center gap-2 min-w-0">
+              <span className="shrink-0">{t.imTitle}</span>
+              {linkedOrder && (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 bg-white/15 truncate max-w-[150px]"
+                  title={linkedOrder}
+                >
+                  {t.imLinkedOrder} {linkedOrder}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {/* ⚠️ 只有已建立会话时才提示连接状态：
                   未登录（还没会话）时并没有 WS 连接，显示"连接中断"会误导用户 */}

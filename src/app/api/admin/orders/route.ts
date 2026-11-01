@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { HttpError, getSession, requirePermission } from '@/lib/auth';
 import { getAdminOrders } from '@/lib/services/order-service';
+import { apiFail } from '@/lib/api-fail';
 
 export async function GET(req: NextRequest) {
-  const s = await getSession();
-  if (!s || s.role !== 'admin') {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  try {
+    await requirePermission('orders.view');
+    const userId = req.nextUrl.searchParams.get('userId') ?? undefined;
+    const orders = await getAdminOrders(200, userId || undefined);
+    return NextResponse.json({ orders });
+  } catch (e) {
+    return apiFail(e);
   }
-  const userId = req.nextUrl.searchParams.get('userId') ?? undefined;
-  const orders = await getAdminOrders(200, userId || undefined);
-  return NextResponse.json({ orders });
 }

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import type { SessionUser } from '@/lib/auth';
 import { sendEmail, orderConfirmationHtml } from '@/lib/mailer';
+import { notifyNewOrder } from '@/lib/admin-notify';
 import type { Product, Sku } from '@prisma/client';
 import {
   getPointRule,
@@ -490,6 +491,14 @@ export async function createOrder(input: {
     }),
   }).catch(() => {});
 
+  // 后台通知：新订单提醒（fire-and-forget，失败不影响下单）
+  void notifyNewOrder({
+    orderNo: order.orderNo,
+    total: order.total,
+    itemCount: order.items.reduce((s, i) => s + i.quantity, 0),
+    customerName: user.name ?? user.username ?? null,
+  }).catch(() => {});
+
   return order;
 }
 
@@ -538,6 +547,17 @@ export async function getAdminOrders(take = 200, userId?: string) {
       items: true,
       user: true,
       address: true,
+      // 关联的客服会话（访客从订单页发起咨询时会挂上）
+      conversations: {
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          visitorName: true,
+          _count: { select: { messages: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      },
     },
   });
   if (!orders.length) return orders;

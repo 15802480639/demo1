@@ -24,6 +24,8 @@ type Conv = {
   unreadAdmin: number;
   lastPreview: string;
   lastSender: string | null;
+  /** 关联订单（客户从订单页发起咨询时带上） */
+  order?: { orderNo: string; total: number | null; status: string | null } | null;
   user: { name: string | null; username: string | null; email: string | null } | null;
 };
 
@@ -83,6 +85,9 @@ export function ChatAdmin() {
   const [input, setInput] = useState('');
   const [conn, setConn] = useState<ChatStatus>('connecting');
   const [loadingConv, setLoadingConv] = useState(false);
+  // 关联订单：手动输入订单号挂到会话上
+  const [orderInput, setOrderInput] = useState('');
+  const [linking, setLinking] = useState(false);
 
   const socketRef = useRef<ChatSocket | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -224,6 +229,26 @@ export function ChatAdmin() {
     return () => clearInterval(iv);
   }, [refreshList]);
 
+  // ⭐ 深链：/admin/chat?conv=<会话ID> → 自动选中该会话
+  //    （后台订单页点「查看会话」跳过来用）
+  //    用 window.location.search 而不是 useSearchParams：避免 App Router 静态预渲染要 Suspense 边界。
+  const autoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (autoSelectedRef.current) return;
+    let cid = '';
+    try {
+      cid = new URLSearchParams(window.location.search).get('conv') ?? '';
+    } catch {
+      cid = '';
+    }
+    if (!cid) return;
+    autoSelectedRef.current = true;
+    // 延后一点再选：等首屏会话列表拉回来，侧边栏才不会出现"选中了但列表里没有"
+    const timer = setTimeout(() => selectConv(cid), 900);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function requestNotify(body: string, conversationId: string) {
     try {
       if (typeof Notification === 'undefined') return;
@@ -329,6 +354,51 @@ export function ChatAdmin() {
     return () => clearInterval(iv);
   }, [selectedId]);
 
+  /** 关联订单：把会话挂到指定订单上 */
+  async function linkOrder() {
+    if (!selectedId) return;
+    const no = orderInput.trim();
+    if (!no) return;
+    setLinking(true);
+    try {
+      const res = await fetch(`/api/chat/conversations/${selectedId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderNo: no }),
+      });
+      if (!res.ok) return;
+      const d = await res.json();
+      if (d?.order) {
+        setConvs((prev) =>
+          prev.map((c) => (c.id === selectedId ? { ...c, order: d.order } : c))
+        );
+        setOrderInput('');
+      }
+    } catch {
+      /* noop */
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  /** 解除订单关联 */
+  async function unlinkOrder() {
+    if (!selectedId) return;
+    try {
+      const res = await fetch(`/api/chat/conversations/${selectedId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderNo: '' }),
+      });
+      if (!res.ok) return;
+      setConvs((prev) =>
+        prev.map((c) => (c.id === selectedId ? { ...c, order: null } : c))
+      );
+    } catch {
+      /* noop */
+    }
+  }
+
   async function toggleClose() {
     if (!selectedId) return;
     const cur = convs.find((c) => c.id === selectedId);
@@ -408,6 +478,12 @@ export function ChatAdmin() {
                       {c.contact && ` · ${c.contactType === 'email' ? '✉' : '☎'} ${c.contact}`}
                       {c.status === 'closed' && ` · ${t.imClosed}`}
                     </p>
+                    {/* 关联订单标记 */}
+                    {c.order && (
+                      <p className="text-[10px] text-accent mt-0.5 truncate">
+                        {t.chatOrderLink}: {c.order.orderNo}
+                      </p>
+                    )}
                   </div>
                 </button>
               );
@@ -435,6 +511,54 @@ export function ChatAdmin() {
                 <button onClick={toggleClose} className="text-xs px-3 py-1.5 border border-line hover:border-ink">
                   {sel.status === 'open' ? t.imClose : t.imReopen}
                 </button>
+              </div>
+
+              {/* 关联订单：客户从订单页发起咨询时会自动带上，这里也可手动关联/解除 */}
+              <div className="px-4 py-2 border-b border-line bg-surface-2 flex flex-wrap items-center gap-2">
+                {sel.order ? (
+                  <>
+                    <span className="text-[11px] text-muted">
+                      {t.chatOrderLink}
+                    </span>
+                    <span className="text-xs font-medium text-ink">{sel.order.orderNo}</span>
+                    {sel.order.total != null && (
+                      <span className="text-[11px] text-muted">
+                        {t.chatOrderTotal}: ₩{sel.order.total.toLocaleString()}
+                      </span>
+                    )}
+                    {sel.order.status && (
+                      <span className="text-[11px] text-muted">
+                        {t.chatOrderStatus}: {sel.order.status}
+                      </span>
+                    )}
+                    <button
+                      onClick={unlinkOrder}
+                      className="text-[10px] text-muted hover:text-accent ml-auto"
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[11px] text-muted">{t.chatOrderNone}</span>
+                    <input
+                      value={orderInput}
+                      onChange={(e) => setOrderInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') linkOrder();
+                      }}
+                      placeholder={t.chatLinkOrderPh}
+                      className="border border-line bg-surface px-2 py-1 text-[11px] outline-none focus:border-accent w-44"
+                    />
+                    <button
+                      onClick={linkOrder}
+                      disabled={linking}
+                      className="text-[10px] px-2 py-1 border border-line hover:border-accent text-accent disabled:opacity-50"
+                    >
+                      {linking ? '…' : t.chatLinkOrder}
+                    </button>
+                  </>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-bg max-h-[55vh]">

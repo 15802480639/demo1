@@ -23,13 +23,22 @@ export default async function AdminDashboardLayout({
     redirect(`/${loc}/admin/login`);
   }
 
+  // 权限档位实时取库（管理员改了权限立即生效，不等 cookie 过期）
+  const { getStaffPermissions, getStaffRole } = await import('@/lib/auth');
+  const [permissions, staffRole] = await Promise.all([
+    getStaffPermissions(),
+    getStaffRole(),
+  ]);
+
   return (
     <AdminShell
       user={{
         email: session.email,
         name: session.name,
         username: session.username,
+        role: staffRole ?? 'owner',
       }}
+      permissions={permissions}
     >
       {children}
     </AdminShell>

@@ -887,6 +887,8 @@ export type AdminDict = {
   imUploadFailed: string;
   // 商品引用（访客把商品发给客服）
   imAskProduct: string;
+  imAskOrder: string;
+  imLinkedOrder: string;
   imCurrentProduct: string;
   imRemoveRef: string;
   imSendProduct: string;
@@ -950,6 +952,92 @@ export type AdminDict = {
   ghIndexDesc: string;
   ghMultiDesc: string;
   ghAuthorityDesc: string;
+  navReports: string;
+  navAuditLogs: string;
+  navStaff: string;
+  navImport: string;
+  roleLabelTip: string;
+  staffTitle: string;
+  staffIntro: string;
+  staffRole: string;
+  staffCurrent: string;
+  staffChangeRole: string;
+  staffRoleChanged: string;
+  staffAgents: string;
+  staffAgentRole: string;
+  staffOwnerOnly: string;
+  impTitle: string;
+  impIntro: string;
+  impDownloadTpl: string;
+  impSelectFile: string;
+  impUpload: string;
+  impParsing: string;
+  impDone: string;
+  impCreated: string;
+  impUpdated: string;
+  impSkipped: string;
+  impFailed: string;
+  impRow: string;
+  impErrorList: string;
+  impDryRun: string;
+  impColName: string;
+  impColSlug: string;
+  impColCode: string;
+  impColPrice: string;
+  impColStock: string;
+  impColColor: string;
+  impColSize: string;
+  impColCategory: string;
+  impColBrand: string;
+  impColStatus: string;
+  impColSkuCode: string;
+  impColGender: string;
+  impColCompare: string;
+  impHint: string;
+  expTitle: string;
+  expOrders: string;
+  expCustomers: string;
+  expSales: string;
+  expRange7: string;
+  expRange30: string;
+  expRange90: string;
+  expRangeAll: string;
+  expWorking: string;
+  expDone: string;
+  repTitle: string;
+  repIntro: string;
+  repDate: string;
+  repOrders: string;
+  repItems: string;
+  repRevenue: string;
+  repAov: string;
+  repNewCustomers: string;
+  repSummary: string;
+  repTotalRevenue: string;
+  repTotalOrders: string;
+  repTotalItems: string;
+  repAvgOrder: string;
+  repEmpty: string;
+  audTitle: string;
+  audIntro: string;
+  audActor: string;
+  audAction: string;
+  audTarget: string;
+  audSummary: string;
+  audTime: string;
+  audAll: string;
+  audEmpty: string;
+  chatOrderLink: string;
+  chatOrderNone: string;
+  chatLinkOrder: string;
+  chatLinkOrderPh: string;
+  chatLinked: string;
+  chatOrderTotal: string;
+  chatOrderStatus: string;
+  chatAdminOpenConv: string;
+  chatAdminMsgUnit: string;
+  chatAdminOpen: string;
+  chatAdminClosed: string;
 };
 
 const ko: Dict = {
@@ -1817,6 +1905,8 @@ const ko: Dict = {
     imStartFailed: '상담을 시작하지 못했습니다. 잠시 후 다시 시도하세요',
     imUploadFailed: '이미지 업로드에 실패했습니다',
     imAskProduct: '이 상품 문의하기',
+    imAskOrder: '이 주문 문의하기',
+    imLinkedOrder: '연결 주문',
     imCurrentProduct: '현재 상품',
     imRemoveRef: '삭제',
     imSendProduct: '상품을 상담으로 보내기',
@@ -1825,7 +1915,7 @@ const ko: Dict = {
     imUploading: '업로드 중…',
     imDesktopNotify: '새 메시지 알림',
     // 客服账号管理（H5 客服台账号）
-    saTitle: '客服 계정 관리',
+    saTitle: '고객지원 계정 관리',
     saSubtitle: 'H5 상담 데스크 로그인 계정',
     saCreate: '계정 추가',
     saUsername: '로그인 아이디',
@@ -1879,6 +1969,92 @@ const ko: Dict = {
     ghIndexDesc: 'AI가 당신을 찾을 수 있는 채널이 모두 열려 있는지',
     ghMultiDesc: '세 언어 사용자가 세 언어로 질문하므로, 답변도 언어별로 제공되어야 합니다',
     ghAuthorityDesc: '사이트 외부의 서드파티 합의 — 인용 가능한 상한을 결정하며, 가장 어렵지만 가장 핵심',
+    navReports: '매출 리포트',
+    navAuditLogs: '작업 로그',
+    navStaff: '관리자 권한',
+    navImport: 'Excel 일괄 등록',
+    roleLabelTip: '현재 관리자 권한 등급입니다.',
+    staffTitle: '관리자 권한 관리',
+    staffIntro: '관리자별 권한 등급을 지정합니다. 권한 변경은 즉시 적용됩니다.',
+    staffRole: '권한 등급',
+    staffCurrent: '현재 등급',
+    staffChangeRole: '등급 변경',
+    staffRoleChanged: '권한 등급이 변경되었습니다',
+    staffAgents: '상담원 권한',
+    staffAgentRole: '상담원 권한 등급',
+    staffOwnerOnly: '권한 관리는 소유자만 할 수 있습니다.',
+    impTitle: 'Excel 일괄 등록/수정',
+    impIntro: '상품 정보를 엑셀로 일괄 등록하거나 수정합니다. 같은 slug가 있으면 수정, 없으면 신규 등록됩니다.',
+    impDownloadTpl: '양식 다운로드',
+    impSelectFile: '엑셀 파일 선택',
+    impUpload: '업로드 및 실행',
+    impParsing: '분석 중...',
+    impDone: '완료',
+    impCreated: '신규 등록',
+    impUpdated: '수정됨',
+    impSkipped: '건너뜀',
+    impFailed: '실패',
+    impRow: '행',
+    impErrorList: '오류 내역',
+    impDryRun: '미리보기(저장 안 함)',
+    impColName: '상품명',
+    impColSlug: '슬러그',
+    impColCode: '품번',
+    impColPrice: '가격',
+    impColStock: '재고',
+    impColColor: '색상',
+    impColSize: '사이즈',
+    impColCategory: '카테고리',
+    impColBrand: '브랜드',
+    impColStatus: '상태',
+    impColSkuCode: 'SKU 코드',
+    impColGender: '성별',
+    impColCompare: '비교가',
+    impHint: '색상/사이즈가 있으면 SKU가 자동 생성됩니다. 같은 상품+같은 옵션의 행은 SKU 하나로 합쳐집니다.',
+    expTitle: '데이터 내보내기',
+    expOrders: '주문 내보내기',
+    expCustomers: '회원 내보내기',
+    expSales: '매출 리포트 내보내기',
+    expRange7: '최근 7일',
+    expRange30: '최근 30일',
+    expRange90: '최근 90일',
+    expRangeAll: '전체',
+    expWorking: '내보내는 중...',
+    expDone: '내보내기가 완료되었습니다',
+    repTitle: '매출 리포트',
+    repIntro: '기간별 매출, 주문 수, 평균 주문 금액을 확인합니다.',
+    repDate: '날짜',
+    repOrders: '주문 수',
+    repItems: '수량',
+    repRevenue: '매출액',
+    repAov: '평균 주문 금액',
+    repNewCustomers: '신규 회원',
+    repSummary: '요약',
+    repTotalRevenue: '총 매출액',
+    repTotalOrders: '총 주문 수',
+    repTotalItems: '총 수량',
+    repAvgOrder: '평균 주문 금액',
+    repEmpty: '해당 기간의 데이터가 없습니다.',
+    audTitle: '작업 로그',
+    audIntro: '관리자의 변경 이력을 확인합니다.',
+    audActor: '작업자',
+    audAction: '작업',
+    audTarget: '대상',
+    audSummary: '내용',
+    audTime: '시각',
+    audAll: '전체 작업',
+    audEmpty: '작업 로그가 없습니다.',
+    chatOrderLink: '연결된 주문',
+    chatOrderNone: '연결된 주문 없음',
+    chatLinkOrder: '주문 연결',
+    chatLinkOrderPh: '주문번호 입력',
+    chatLinked: '주문이 연결되었습니다',
+    chatOrderTotal: '주문 금액',
+    chatOrderStatus: '주문 상태',
+    chatAdminOpenConv: '대화 열기',
+    chatAdminMsgUnit: '개 메시지',
+    chatAdminOpen: '진행 중',
+    chatAdminClosed: '종료',
   },
 };
 
@@ -2746,6 +2922,8 @@ const zh: Dict = {
     imStartFailed: '发起咨询失败，请稍后重试',
     imUploadFailed: '图片上传失败',
     imAskProduct: '咨询此商品',
+    imAskOrder: '咨询这单',
+    imLinkedOrder: '关联订单',
     imCurrentProduct: '当前商品',
     imRemoveRef: '移除',
     imSendProduct: '把商品发给客服',
@@ -2808,6 +2986,92 @@ const zh: Dict = {
     ghIndexDesc: '让 AI 能抓到你的通道是否全部打开',
     ghMultiDesc: '三种语言的用户问三种语言的问题，答案要分语种',
     ghAuthorityDesc: '站外第三方共识 —— 决定能被引用的上限，最难做但最关键',
+    navReports: '销售报表',
+    navAuditLogs: '操作日志',
+    navStaff: '管理员权限',
+    navImport: 'Excel 批量导入',
+    roleLabelTip: '当前管理员的权限档位。',
+    staffTitle: '管理员权限管理',
+    staffIntro: '为每位管理员指定权限档位，权限变更立即生效。',
+    staffRole: '权限档位',
+    staffCurrent: '当前档位',
+    staffChangeRole: '变更档位',
+    staffRoleChanged: '权限档位已变更',
+    staffAgents: '客服权限',
+    staffAgentRole: '客服权限档位',
+    staffOwnerOnly: '仅所有者可管理权限。',
+    impTitle: 'Excel 批量导入 / 修改',
+    impIntro: '用 Excel 批量新建或修改商品。已存在相同 slug 的会更新，否则新建。',
+    impDownloadTpl: '下载模板',
+    impSelectFile: '选择 Excel 文件',
+    impUpload: '上传并执行',
+    impParsing: '解析中…',
+    impDone: '完成',
+    impCreated: '新建',
+    impUpdated: '更新',
+    impSkipped: '跳过',
+    impFailed: '失败',
+    impRow: '行',
+    impErrorList: '错误明细',
+    impDryRun: '试运行（不写入）',
+    impColName: '商品名',
+    impColSlug: 'Slug',
+    impColCode: '货号',
+    impColPrice: '价格',
+    impColStock: '库存',
+    impColColor: '颜色',
+    impColSize: '尺码',
+    impColCategory: '分类',
+    impColBrand: '品牌',
+    impColStatus: '状态',
+    impColSkuCode: 'SKU 编码',
+    impColGender: '性别',
+    impColCompare: '划线价',
+    impHint: '填了颜色/尺码会自动生成 SKU。同一商品 + 同一选项的多行会合并为一个 SKU。',
+    expTitle: '数据导出',
+    expOrders: '导出订单',
+    expCustomers: '导出会员',
+    expSales: '导出销售报表',
+    expRange7: '最近 7 天',
+    expRange30: '最近 30 天',
+    expRange90: '最近 90 天',
+    expRangeAll: '全部',
+    expWorking: '导出中…',
+    expDone: '导出完成',
+    repTitle: '销售报表',
+    repIntro: '按期间查看销售额、订单数与客单价。',
+    repDate: '日期',
+    repOrders: '订单数',
+    repItems: '件数',
+    repRevenue: '销售额',
+    repAov: '客单价',
+    repNewCustomers: '新增会员',
+    repSummary: '汇总',
+    repTotalRevenue: '总销售额',
+    repTotalOrders: '总订单数',
+    repTotalItems: '总件数',
+    repAvgOrder: '客单价',
+    repEmpty: '该期间暂无数据。',
+    audTitle: '操作日志',
+    audIntro: '查看管理员的操作记录。',
+    audActor: '操作人',
+    audAction: '操作',
+    audTarget: '对象',
+    audSummary: '内容',
+    audTime: '时间',
+    audAll: '全部操作',
+    audEmpty: '暂无操作日志。',
+    chatOrderLink: '关联订单',
+    chatOrderNone: '未关联订单',
+    chatLinkOrder: '关联订单',
+    chatLinkOrderPh: '输入订单号',
+    chatLinked: '订单已关联',
+    chatOrderTotal: '订单金额',
+    chatOrderStatus: '订单状态',
+    chatAdminOpenConv: '打开对话',
+    chatAdminMsgUnit: '条消息',
+    chatAdminOpen: '进行中',
+    chatAdminClosed: '已结束',
   },
 };
 
@@ -3676,6 +3940,8 @@ const en: Dict = {
     imStartFailed: 'Could not start the conversation. Please try again',
     imUploadFailed: 'Image upload failed',
     imAskProduct: 'Ask about this item',
+    imAskOrder: 'Ask about this order',
+    imLinkedOrder: 'Order',
     imCurrentProduct: 'Current item',
     imRemoveRef: 'Remove',
     imSendProduct: 'Send item to agent',
@@ -3738,6 +4004,92 @@ const en: Dict = {
     ghIndexDesc: 'Whether every channel that lets AI find you is open',
     ghMultiDesc: 'Users ask in three languages, so answers must be language-specific',
     ghAuthorityDesc: 'Off-site third-party consensus — sets the ceiling of citability; hardest but most critical',
+    navReports: 'Sales Reports',
+    navAuditLogs: 'Audit Logs',
+    navStaff: 'Staff & Roles',
+    navImport: 'Excel Import',
+    roleLabelTip: 'Your current admin permission tier.',
+    staffTitle: 'Staff Permissions',
+    staffIntro: 'Assign a permission tier to each admin. Changes apply immediately.',
+    staffRole: 'Permission tier',
+    staffCurrent: 'Current tier',
+    staffChangeRole: 'Change tier',
+    staffRoleChanged: 'Permission tier updated',
+    staffAgents: 'Agent permissions',
+    staffAgentRole: 'Agent tier',
+    staffOwnerOnly: 'Only the owner can manage permissions.',
+    impTitle: 'Excel Bulk Import',
+    impIntro: 'Bulk create or update products via Excel. Existing slug is updated, otherwise created.',
+    impDownloadTpl: 'Download template',
+    impSelectFile: 'Choose Excel file',
+    impUpload: 'Upload & run',
+    impParsing: 'Parsing…',
+    impDone: 'Done',
+    impCreated: 'Created',
+    impUpdated: 'Updated',
+    impSkipped: 'Skipped',
+    impFailed: 'Failed',
+    impRow: 'Row',
+    impErrorList: 'Errors',
+    impDryRun: 'Dry run (no save)',
+    impColName: 'Product name',
+    impColSlug: 'Slug',
+    impColCode: 'Item code',
+    impColPrice: 'Price',
+    impColStock: 'Stock',
+    impColColor: 'Color',
+    impColSize: 'Size',
+    impColCategory: 'Category',
+    impColBrand: 'Brand',
+    impColStatus: 'Status',
+    impColSkuCode: 'SKU code',
+    impColGender: 'Gender',
+    impColCompare: 'Compare at',
+    impHint: 'Fill Color/Size to auto-create SKUs. Rows with the same product and options merge into one SKU.',
+    expTitle: 'Data Export',
+    expOrders: 'Export orders',
+    expCustomers: 'Export members',
+    expSales: 'Export sales report',
+    expRange7: 'Last 7 days',
+    expRange30: 'Last 30 days',
+    expRange90: 'Last 90 days',
+    expRangeAll: 'All',
+    expWorking: 'Exporting…',
+    expDone: 'Export completed',
+    repTitle: 'Sales Report',
+    repIntro: 'View revenue, order count and average order value by period.',
+    repDate: 'Date',
+    repOrders: 'Orders',
+    repItems: 'Items',
+    repRevenue: 'Revenue',
+    repAov: 'Avg order value',
+    repNewCustomers: 'New members',
+    repSummary: 'Summary',
+    repTotalRevenue: 'Total revenue',
+    repTotalOrders: 'Total orders',
+    repTotalItems: 'Total items',
+    repAvgOrder: 'Avg order value',
+    repEmpty: 'No data in this period.',
+    audTitle: 'Audit Log',
+    audIntro: 'Review admin operation history.',
+    audActor: 'Actor',
+    audAction: 'Action',
+    audTarget: 'Target',
+    audSummary: 'Detail',
+    audTime: 'Time',
+    audAll: 'All actions',
+    audEmpty: 'No audit logs yet.',
+    chatOrderLink: 'Linked order',
+    chatOrderNone: 'No linked order',
+    chatLinkOrder: 'Link order',
+    chatLinkOrderPh: 'Enter order no.',
+    chatLinked: 'Order linked',
+    chatOrderTotal: 'Order total',
+    chatOrderStatus: 'Order status',
+    chatAdminOpenConv: 'Open conversation',
+    chatAdminMsgUnit: 'messages',
+    chatAdminOpen: 'Open',
+    chatAdminClosed: 'Closed',
   },
 };
 

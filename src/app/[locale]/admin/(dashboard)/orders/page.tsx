@@ -48,6 +48,14 @@ type OrderRow = {
   grantedCoupons?: { code: string; status: string }[];
   user: { id: string; email: string; name: string | null } | null;
   address: AddressRow;
+  /** 关联的客服会话（访客从订单页发起咨询时挂上） */
+  conversations?: {
+    id: string;
+    status: string;
+    createdAt: string;
+    visitorName: string | null;
+    _count: { messages: number };
+  }[];
   items: {
     id: string;
     name: string;
@@ -193,6 +201,20 @@ export default function AdminOrdersPage() {
         <span className="text-xs text-muted self-center">
           {filtered.length} / {orders.length} {t.oUnit}
         </span>
+        {/* 导出订单（Excel） */}
+        <button
+          onClick={() => {
+            const a = document.createElement('a');
+            a.href = `/api/admin/export?type=orders&range=all&status=${fStatus || 'all'}`;
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          }}
+          className="text-xs px-3 py-1.5 border border-line hover:border-accent text-accent ml-auto"
+        >
+          {t.expOrders}
+        </button>
       </div>
 
       {loading ? (
@@ -405,6 +427,40 @@ export default function AdminOrdersPage() {
                       </p>
                     ) : (
                       <p className="text-xs text-muted">{t.oNoAddress}</p>
+                    )}
+                  </div>
+                  {/* 关联的客服会话（客户从订单页发起咨询时挂上） */}
+                  <div>
+                    <p className="text-xs tracking-widest text-muted mb-1">{t.chatOrderLink}</p>
+                    {(o.conversations?.length ?? 0) === 0 ? (
+                      <p className="text-xs text-muted">{t.chatOrderNone}</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {o.conversations!.map((c) => (
+                          <div key={c.id} className="flex items-center gap-2 text-xs">
+                            <Link
+                              href={`/${locale}/admin/chat?conv=${c.id}`}
+                              className="text-accent hover:underline"
+                              title={t.chatAdminOpenConv}
+                            >
+                              {c.visitorName || c.id.slice(0, 8)} · {c._count.messages}{' '}
+                              {t.chatAdminMsgUnit}
+                            </Link>
+                            <span className="text-muted">
+                              {new Date(c.createdAt).toLocaleString('zh-CN')}
+                            </span>
+                            {c.status === 'open' ? (
+                              <span className="text-[10px] px-1.5 py-0.5 border border-emerald-300 text-emerald-700">
+                                {t.chatAdminOpen}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.5 border border-line text-muted">
+                                {t.chatAdminClosed}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

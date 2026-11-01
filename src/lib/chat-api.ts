@@ -18,6 +18,8 @@ export async function createConversation(data: {
   contactType: 'email' | 'phone' | 'none';
   contact?: string;
   locale: string;
+  /** 关联订单号（客户从订单页发起咨询时带上，服务端校验归属） */
+  orderNo?: string;
 }) {
   return toJson(
     await fetch('/api/chat/conversations', {
@@ -72,6 +74,21 @@ export async function setStatus(id: string, status: 'open' | 'closed') {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
+    })
+  );
+}
+
+/**
+ * 把会话关联到订单（访客从订单页发起咨询 / 客服手动挂单）。
+ * 服务端会校验订单归属，空字符串 = 解除关联。
+ */
+export async function linkOrder(id: string, orderNo: string, guest?: string) {
+  const q = guest ? `?guest=${encodeURIComponent(guest)}` : '';
+  return toJson(
+    await fetch(`/api/chat/conversations/${id}${q}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderNo }),
     })
   );
 }

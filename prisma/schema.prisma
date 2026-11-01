@@ -19,6 +19,12 @@ model User {
   name          String?
   passwordHash  String?
   role          String         @default("customer") // customer | admin
+  /// 后台权限档位（仅 role=admin 时生效）。
+  /// 为什么不复用 role：role 被全站 30+ 处 `role !== 'admin'` 校验依赖，
+  /// 一旦塞进更多值，全站鉴权会连环炸。改为独立字段 → 零风险、向后兼容，
+  /// 且权限调整立即生效（不像会话 token 那样要等重新登录）。
+  /// 取值见 src/lib/permissions.ts：owner | admin | order | product | support | finance | viewer
+  staffRole     String         @default("owner")
   /// 积分余额（可抵扣现金的虚拟权益）。所有增减必须经 PointTransaction 留痕，禁止直接改。
   points        Int            @default(0)
   createdAt     DateTime       @default(now())
@@ -38,6 +44,8 @@ model User {
   invitedById  String?
   invitedBy    User?     @relation("UserReferral", fields: [invitedById], references: [id])
   invitedUsers User[]    @relation("UserReferral")
+  /// 该管理员的操作日志
+  auditLogs    AuditLog[]
 }
 
 model Address {
@@ -208,6 +216,8 @@ model Order {
   shipmentId  String?
   paymentId   String?
   pointTxns   PointTransaction[]
+  /// 与本单关联的客服会话（客户在订单页发起咨询时建立关联）
+  conversations ChatConversation[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
@@ -525,6 +535,9 @@ model ChatConversation {
   /// 关联登录用户（登录后发起会话时记录，游客为空）
   userId      String?
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// 关联订单（客户在订单页发起咨询时带上，后台客服可直接看到是哪一单）
+  orderId     String?
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
   /// 游客身份令牌：未登录访客凭此令牌 + conversationId 继续会话与收发消息
   guestToken  String?  @unique
   /// 会话状态：open | closed
@@ -556,6 +569,10 @@ model ChatAgent {
   displayName  String
   /// 是否在职。停用后无法登录，但历史消息保留
   active       Boolean   @default(true)
+  /// H5 端功能权限档位（JSON 字符串，见 src/lib/permissions.ts 的 AGENT_ROLES）。
+  /// 客服之间也要分权：只接待 / 可查订单 / 可改订单，各不相同。
+  /// 空字符串 = 默认「只接待」（保守默认，不给额外权限）。
+  permissions  String    @default("support_basic")
   /// 最后登录时间
   lastLoginAt  DateTime? @db.Timestamptz(3)
   createdAt    DateTime  @default(dbgenerated("now()")) @db.Timestamptz(3)
@@ -616,4 +633,81 @@ model ChatMessage {
   @@index([conversationId, createdAt])
   @@index([conversationId, seq])
   @@unique([conversationId, clientId])
+}
+
+// ---------------- 管理员操作日志 ----------------
+/// 后台所有「写操作」留痕：谁、什么时候、改了什么。
+///
+/// 为什么必须有：后台管理员能改价、改库存、改订单状态、动积分、发券 ——
+/// 这些动作一旦出错，没有日志就完全无法追溯是谁做的。
+///
+/// 写入必须走 src/lib/audit.ts 的 logAudit()，禁止直接 prisma.auditLog.create
+/// （因为要统一补齐 actor / ip / 摘要）。
+model AuditLog {
+  id        String   @id @default(cuid())
+  /// 操作人（管理员 User.id）。系统自动操作可为空
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// 操作人显示名快照（管理员被删后仍可看出是谁干的）
+  actorName String   @default("")
+  /// 操作人当时的权限档位
+  actorRole String   @default("")
+  /// 操作类型，如 order.status.update / product.import / points.adjust
+  action    String
+  /// 操作对象类型：order | product | customer | coupon | agent | ...
+  targetType String  @default("")
+  /// 操作对象 ID（业务主键）
+  targetId  String?
+  /// 人类可读摘要（后台列表直接展示这一行）
+  summary   String   @default("")
+  /// 变更详情（JSON 字符串）：改了哪些字段、前后值
+  detail    String   @default("{}")
+  /// 来源 IP
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([action])
+  @@index([targetType, targetId])
+}
+
+// ---------------- 后台通知（新订单 / 新消息提醒） ----------------
+/// 后台通知中心的数据源。
+///
+/// 为什么要这张表而不是直接查订单表：
+///   - 「未读」必须按人记（跟 ChatReadCursor 同理，A 看了不等于 B 看了）
+///   - 通知内容要在生成时快照（订单号、金额），之后订单变了也不影响已发通知
+model AdminNotification {
+  id        String   @id @default(cuid())
+  /// 通知类型：order（新订单）| chat（新客服消息）| system（系统）
+  type      String   @default("order")
+  /// 标题，如「새 주문 MK-20261101-ABCD」
+  title     String
+  /// 正文摘要
+  body      String   @default("")
+  /// 点击跳转的站内路径（相对路径）
+  link      String   @default("")
+  /// 关联订单（type=order 时）
+  orderId   String?
+  /// 关联会话（type=chat 时）
+  conversationId String?
+  /// 每位管理员各自的已读时间。null = 未读
+  reads     AdminNotificationRead[]
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// 通知已读游标（按管理员各自记）
+model AdminNotificationRead {
+  id             String            @id @default(cuid())
+  notificationId String
+  notification   AdminNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  /// 阅读者（管理员 User.id）
+  userId         String
+  readAt         DateTime          @default(now())
+
+  @@unique([notificationId, userId])
+  @@index([userId])
 }

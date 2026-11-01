@@ -75,3 +75,14 @@ webshopp-*.tar.gz
 
 # playwright-cli 会话快照（工具噪音）
 .playwright-cli/
+
+# ⭐ 本地 PGlite 数据库（本地开发用的假 PG，Docker 起不来时的替代，绝不入库）
+/.pglite/
+
+# 一次性 schema 快照文件（对比迁移用，临时产物）
+_prod_schema.sql
+_prod_schema_clean.sql
+_schema_base.prisma
+
+# 本地回归脚本的截图产物
+/scripts/shots/

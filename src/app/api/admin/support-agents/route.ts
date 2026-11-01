@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, HttpError } from '@/lib/auth';
+import { requirePermission, HttpError } from '@/lib/auth';
 import { hashCsPassword } from '@/lib/cs-auth';
+import { logAudit, clientIp, actorFromSession } from '@/lib/audit';
 
 // GET /api/admin/support-agents —— 客服账号列表
 // POST /api/admin/support-agents —— 新建客服账号
@@ -16,7 +17,7 @@ function fail(e: unknown) {
 
 export async function GET() {
   try {
-    await requireAdmin();
+    await requirePermission('agents.manage');
   } catch (e) {
     return fail(e);
   }
@@ -32,7 +33,6 @@ export async function GET() {
       createdAt: true,
     },
   });
-
   return NextResponse.json({
     agents: agents.map((a) => ({
       ...a,
@@ -43,11 +43,13 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requirePermission('agents.manage');
   } catch (e) {
     return fail(e);
   }
+  const actor = actorFromSession({ ...session, staffRole: session.staffRole ?? 'owner' });
 
   let body: any = {};
   try {
@@ -86,6 +88,16 @@ export async function POST(req: Request) {
     select: { id: true, username: true, displayName: true, active: true, createdAt: true },
   });
 
+    // ---- 操作日志 ----
+    await logAudit({
+      action: 'agent.create',
+      actor,
+      targetType: 'agent',
+      targetId: agent.id,
+      summary: `상담원 계정 생성: ${username}`,
+      detail: { username: agent.username, displayName: agent.displayName },
+      ip: clientIp(req),
+    });
   return NextResponse.json({
     ok: true,
     agent: { ...agent, createdAt: agent.createdAt.toISOString() },

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin, HttpError } from '@/lib/auth';
+import { requirePermission, HttpError } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { isLiveMail } from '@/lib/mailer';
 
 /** 鉴权失败返回 401/403 而不是 500（见 lib/auth.ts 的 HttpError 注释） */
-async function guard() {
+async function guard(perm: 'newsletter.edit' | 'newsletter.send' = 'newsletter.edit') {
   try {
-    await requireAdmin();
+    await requirePermission(perm);
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : 'UNKNOWN' },

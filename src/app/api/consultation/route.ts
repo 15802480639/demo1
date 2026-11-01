@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, getSession, HttpError } from '@/lib/auth';
+import { requirePermission, getSession, HttpError } from '@/lib/auth';
 
 /**
  * Kakao 咨询记录 API
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * requireAdmin() 抛的 HttpError 必须在这里转成对应状态码。
+ * requirePermission() 抛的 HttpError 必须在这里转成对应状态码。
  * 不接的话Next.js 会把任何 throw 都兜成 **500**，
  * 未登录访问后台接口看着像"服务器炸了"，实际只是没登录 —— 极难排查。
  */
@@ -95,7 +95,7 @@ function authFail(e: unknown): NextResponse | null {
 export async function GET(req: NextRequest) {
   let rows, counts;
   try {
-    await requireAdmin();
+    await requirePermission('consultations.view');
     const sp = req.nextUrl.searchParams;
     const status = sp.get('status');
     const limit = Math.min(Number(sp.get('limit')) || 100, 500);
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
 /** 后台改状态 / 备注 */
 export async function PATCH(req: NextRequest) {
   try {
-    await requireAdmin();
+    await requirePermission('consultations.edit');
   } catch (e) {
     const fail = authFail(e);
     if (fail) return fail;

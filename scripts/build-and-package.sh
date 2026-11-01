@@ -42,7 +42,22 @@ log "类型检查"
 "$NODE_BIN" ./node_modules/typescript/bin/tsc --noEmit || die "类型检查失败"
 
 log "构建 standalone"
-"$NODE_BIN" ./node_modules/next/dist/bin/next build || die "构建失败"
+# ⚠️ 必须限制 Prisma 连接池大小（connection_limit=1）：
+#    next build 会用 11 个 worker 并发预渲染 169 个页面，
+#    每个 worker 的 Prisma 默认连接池（10）→ 峰值 100+ 连接。
+#    打生产库会耗尽 PG 的 max_connections；打本地 PGlite 会直接
+#    报 P1017「Server has closed the connection」（2026-11-01 实测）。
+#    生产构建时 DATABASE_URL 指向生产库，这里只加连接数上限，不改库地址。
+BUILD_DB_URL="${DATABASE_URL}"
+if [[ -n "$BUILD_DB_URL" && "$BUILD_DB_URL" != *"connection_limit="* ]]; then
+  BUILD_DB_URL="${BUILD_DB_URL}&connection_limit=1"
+  # URL 里已有 ? 则追加 &，否则用 ?
+  if [[ "$BUILD_DB_URL" != *"?"* ]]; then
+    BUILD_DB_URL="${BUILD_DB_URL}?connection_limit=1"
+  fi
+  log "构建期连接池限制为 1"
+fi
+DATABASE_URL="$BUILD_DB_URL" "$NODE_BIN" ./node_modules/next/dist/bin/next build || die "构建失败"
 
 [[ -d .next/standalone ]] || die "未生成 .next/standalone"
 

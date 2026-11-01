@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth';
+import { requirePermission } from '@/lib/auth';
 import { pushAllSiteUrls, pushPaths, getIndexNowKey } from '@/lib/indexnow';
 
 /**
@@ -9,7 +9,7 @@ import { pushAllSiteUrls, pushPaths, getIndexNowKey } from '@/lib/indexnow';
  */
 
 export async function GET() {
-  await requireAdmin();
+  await requirePermission('seo.edit');
   const key = await getIndexNowKey();
   const base = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '');
   return NextResponse.json({
@@ -24,7 +24,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  await requireAdmin();
+  await requirePermission('seo.edit');
   const body = await req.json().catch(() => ({}));
   const key = typeof body.key === 'string' && body.key.trim() ? body.key.trim() : undefined;
 

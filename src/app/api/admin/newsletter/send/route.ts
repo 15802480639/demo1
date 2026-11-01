@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin, HttpError } from '@/lib/auth';
+import { requirePermission, HttpError } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { isLiveMail, sendBatch } from '@/lib/mailer';
 import { renderNewsletterHtml, renderNewsletterText, type MailLocale } from '@/lib/mail-template';
@@ -23,7 +23,7 @@ function normalizeLocale(s: string): MailLocale {
 /** 后台：群发电子报 */
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin();
+    await requirePermission('newsletter.send');
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;
     return NextResponse.json(

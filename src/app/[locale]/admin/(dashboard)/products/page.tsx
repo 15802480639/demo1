@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { formatPrice } from '@/lib/format';
 import { productStatusLabel } from '@/lib/order-labels';
@@ -207,9 +208,18 @@ export default function AdminProductsPage() {
           <h1 className="font-display text-3xl text-ink">{t.products}</h1>
           <p className="text-xs text-muted mt-1">{t.pIntro}</p>
         </div>
-        <button onClick={openNew} className="btn-gold">
-          + {t.newProduct}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Excel 批量导入入口 */}
+          <Link
+            href={`/${locale}/admin/products/import`}
+            className="text-xs px-3 py-2 border border-line hover:border-accent text-accent"
+          >
+            {t.navImport}
+          </Link>
+          <button onClick={openNew} className="btn-gold">
+            + {t.newProduct}
+          </button>
+        </div>
       </div>
 
       {/* 筛选查找 */}

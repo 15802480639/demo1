@@ -32,6 +32,13 @@ export type ProductInput = {
   images?: string[];
   skus?: AdminSkuInput[];
   specs?: AdminSpecInput[];
+  /**
+   * 指定 slug（Excel 批量导入用）。
+   * ⚠️ 以前 createProduct 一律从 name/code 重新生成 slug，导致导入表里填的 slug 被丢弃
+   *    → 第二次导入同一个 slug 时按 slug 查不到 → 反复新建重复商品。
+   *    传入此字段时优先使用（冲突时自动加后缀）。
+   */
+  slug?: string;
   // ---- 积分配置 ----
   /** 是否参与消费返积分 */
   earnPoints?: boolean;
@@ -141,7 +148,9 @@ function pointConfigOf(data: ProductInput) {
 }
 
 export async function createProduct(data: ProductInput) {
-  const slug = await uniqueSlug(slugBase(data.code || data.name));
+  // ⭐ 优先用调用方指定的 slug（Excel 导入）；没指定才从 code/name 生成
+  const slugSource = slugBase(data.slug || data.code || data.name);
+  const slug = await uniqueSlug(slugSource);
   const skus = (data.skus ?? []).map((s, i) => ({
     skuCode: `${skuCodeFor(data.code, s, i)}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
     options: JSON.stringify(optionsFor(s)),

@@ -1,17 +1,29 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale } from '@/components/i18n/locale-provider';
 import { useAuth } from '@/components/auth/auth-provider';
 import type { Locale } from '@/i18n/config';
 import type { AdminDict } from '@/i18n/dictionaries';
+import type { Permission } from '@/lib/permissions';
+import { STAFF_ROLE_LABELS, normalizeStaffRole } from '@/lib/permissions';
+import { AdminBell } from '@/components/admin/admin-bell';
 
 export function AdminShell({
   user,
+  permissions,
   children,
 }: {
-  user: { email: string | null; name: string | null; username?: string | null };
+  user: {
+    email: string | null;
+    name: string | null;
+    username?: string | null;
+    role?: string | null;
+  };
+  /** 当前管理员的权限点列表（服务端实时查库后传入） */
+  permissions: Permission[];
   children: React.ReactNode;
 }) {
   const { locale, dict } = useLocale();
@@ -20,26 +32,39 @@ export function AdminShell({
   const pathname = usePathname();
   const router = useRouter();
 
-  const NAV: { href: string; label: string; exact?: boolean }[] = [
+  const NAV: { href: string; label: string; exact?: boolean; perm?: Permission }[] = [
     { href: '/admin', label: t.dashboard, exact: true },
-    { href: '/admin/categories', label: t.categories },
-    { href: '/admin/brands', label: t.brands },
-    { href: '/admin/products', label: t.products },
-    { href: '/admin/orders', label: t.orders },
-    { href: '/admin/consultations', label: t.navConsultations },
-    { href: '/admin/coupons', label: t.coupons },
-    { href: '/admin/points', label: t.pointSettings },
-    { href: '/admin/newsletter', label: t.navNewsletter },
-    { href: '/admin/customers', label: t.customers },
-    { href: '/admin/referrals', label: t.referrals },
-    { href: '/admin/banners', label: t.banners },
-    { href: '/admin/content', label: t.siteContent },
-    { href: '/admin/seo', label: t.seo },
-    { href: '/admin/geo', label: t.geo },
-    { href: '/admin/geo-audit', label: t.geoAudit },
-    { href: '/admin/chat', label: t.imTitle },
-    { href: '/admin/support-agents', label: t.saTitle },
+    { href: '/admin/categories', label: t.categories, perm: 'products.view' },
+    { href: '/admin/brands', label: t.brands, perm: 'products.view' },
+    { href: '/admin/products', label: t.products, perm: 'products.view' },
+    { href: '/admin/orders', label: t.orders, perm: 'orders.view' },
+    { href: '/admin/consultations', label: t.navConsultations, perm: 'consultations.view' },
+    { href: '/admin/coupons', label: t.coupons, perm: 'coupons.edit' },
+    { href: '/admin/points', label: t.pointSettings, perm: 'points.view' },
+    { href: '/admin/newsletter', label: t.navNewsletter, perm: 'newsletter.edit' },
+    { href: '/admin/customers', label: t.customers, perm: 'customers.view' },
+    { href: '/admin/referrals', label: t.referrals, perm: 'referrals.view' },
+    { href: '/admin/banners', label: t.banners, perm: 'content.edit' },
+    { href: '/admin/content', label: t.siteContent, perm: 'content.edit' },
+    { href: '/admin/seo', label: t.seo, perm: 'seo.edit' },
+    { href: '/admin/geo', label: t.geo, perm: 'geo.edit' },
+    { href: '/admin/geo-audit', label: t.geoAudit, perm: 'geo.edit' },
+    { href: '/admin/chat', label: t.imTitle, perm: 'chat.view' },
+    { href: '/admin/support-agents', label: t.saTitle, perm: 'agents.manage' },
+    { href: '/admin/reports', label: t.navReports, perm: 'reports.view' },
+    { href: '/admin/audit-logs', label: t.navAuditLogs, perm: 'audit.view' },
+    { href: '/admin/staff', label: t.navStaff, perm: 'staff.manage' },
   ];
+
+  // 按权限过滤菜单：无权限的模块直接不渲染（前端过滤只是体验，
+  // 真正的安全边界在服务端 requirePermission 校验）
+  const visibleNav = useMemo(() => {
+    if (!permissions || permissions.length === 0) return NAV;
+    return NAV.filter((n) => !n.perm || permissions.includes(n.perm));
+  }, [permissions]);
+
+  const roleKey = normalizeStaffRole(user.role);
+  const roleLabel = STAFF_ROLE_LABELS[roleKey][locale === 'zh' ? 'zh' : locale === 'en' ? 'en' : 'ko'];
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === `/${locale}${href}` : pathname.startsWith(`/${locale}${href}`);
@@ -62,7 +87,7 @@ export function AdminShell({
         </Link>
         <div className="text-[10px] tracking-[0.3em] text-accent mb-8">{t.console}</div>
         <nav className="space-y-1">
-          {NAV.map((n) => (
+          {visibleNav.map((n) => (
             <Link
               key={n.href}
               href={`/${locale}${n.href}`}
@@ -91,7 +116,7 @@ export function AdminShell({
           <img src="/brand/jnd-logo-white.png" alt="J&D" width={120} height={61} className="h-8 w-auto" />
         </Link>
         <div className="flex flex-wrap gap-1.5">
-          {NAV.map((n) => (
+          {visibleNav.map((n) => (
             <Link
               key={n.href}
               href={`/${locale}${n.href}`}
@@ -114,6 +139,15 @@ export function AdminShell({
           <span className="text-sm text-ink-soft mr-4 hidden sm:inline">
             {user.name || user.username || user.email || t.amDefaultUser}
           </span>
+          {/* 当前权限档位（一眼看出自己是哪个角色） */}
+          <span
+            className="hidden md:inline text-[10px] tracking-widest border border-line px-2 py-1 mr-3 text-muted"
+            title={t.roleLabelTip}
+          >
+            {roleLabel}
+          </span>
+          {/* 新订单 / 新消息提醒 */}
+          <AdminBell locale={locale} />
           <div className="flex items-center border border-line mr-2">
             <button
               onClick={() => switchLocale('ko')}

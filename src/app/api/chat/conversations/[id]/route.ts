@@ -67,6 +67,9 @@ export async function GET(
       userName: string | null;
       userUsername: string | null;
       userEmail: string | null;
+      orderNo: string | null;
+      orderTotal: number | null;
+      orderStatus: string | null;
     }[]
   >`
     SELECT c."id",
@@ -77,9 +80,13 @@ export async function GET(
            c."locale",
            u."name"   AS "userName",
            u."username" AS "userUsername",
-           u."email"  AS "userEmail"
+           u."email"  AS "userEmail",
+           o."orderNo" AS "orderNo",
+           o."total"   AS "orderTotal",
+           o."status"  AS "orderStatus"
     FROM "ChatConversation" c
     LEFT JOIN "User" u ON u."id" = c."userId"
+    LEFT JOIN "Order" o ON o."id" = c."orderId"
     WHERE c."id" = ${id}
   `;
   if (!conv) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
@@ -120,6 +127,9 @@ export async function GET(
       contact: conv.contact,
       status: conv.status,
       locale: conv.locale,
+      order: conv.orderNo
+        ? { orderNo: conv.orderNo, total: conv.orderTotal, status: conv.orderStatus }
+        : null,
       user: conv.userName || conv.userUsername || conv.userEmail
         ? { name: conv.userName, username: conv.userUsername, email: conv.userEmail }
         : null,
@@ -178,10 +188,33 @@ export async function PATCH(
       });
       return NextResponse.json({ ok: true, status: conv.status });
     }
+    // 关联订单：客服手动把会话挂到某个订单上。
+    // ⚠️ 必须校验订单属于该会话的客户，否则可把任意订单挂到别人的会话上。
+    if (typeof body.orderNo === 'string') {
+      const no = body.orderNo.trim().slice(0, 40);
+      if (!no) {
+        // 空字符串 = 解除关联
+        await prisma.chatConversation.update({ where: { id }, data: { orderId: null } });
+        return NextResponse.json({ ok: true, order: null });
+      }
+      const convUserId = await prisma.chatConversation.findUnique({
+        where: { id },
+        select: { userId: true },
+      });
+      const ord = await prisma.order.findFirst({
+        where: { orderNo: no, ...(convUserId?.userId ? { userId: convUserId.userId } : {}) },
+        select: { id: true, orderNo: true, total: true, status: true },
+      });
+      if (!ord) {
+        return NextResponse.json({ error: 'ORDER_NOT_FOUND' }, { status: 404 });
+      }
+      await prisma.chatConversation.update({ where: { id }, data: { orderId: ord.id } });
+      return NextResponse.json({ ok: true, order: ord });
+    }
     return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 });
   }
 
-  // 访客操作：仅允许标记已读，且须证明是该会话的归属用户
+  // 访客操作：标记已读 / 关联自己的订单，且须证明是该会话的归属用户
   const access = await checkVisitorAccess(id, guest);
   if ('notFound' in access) {
     return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
@@ -195,6 +228,28 @@ export async function PATCH(
       data: { read: true },
     });
     return NextResponse.json({ ok: true });
+  }
+  // 访客关联订单（从订单详情页发起咨询时带上订单号）。
+  // ⚠️ 必须校验订单属于该会话的客户，否则可把别人的订单挂到自己的会话上。
+  if (typeof body.orderNo === 'string') {
+    const no = body.orderNo.trim().slice(0, 40);
+    if (!no) {
+      await prisma.chatConversation.update({ where: { id }, data: { orderId: null } });
+      return NextResponse.json({ ok: true, order: null });
+    }
+    const conv = await prisma.chatConversation.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+    const ord = await prisma.order.findFirst({
+      where: { orderNo: no, ...(conv?.userId ? { userId: conv.userId } : {}) },
+      select: { id: true, orderNo: true, total: true, status: true },
+    });
+    if (!ord) {
+      return NextResponse.json({ error: 'ORDER_NOT_FOUND' }, { status: 404 });
+    }
+    await prisma.chatConversation.update({ where: { id }, data: { orderId: ord.id } });
+    return NextResponse.json({ ok: true, order: ord });
   }
   return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 });
 }

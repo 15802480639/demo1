@@ -41,6 +41,8 @@ export async function POST(req: Request) {
       name: user.name,
       email: user.email,
       role: user.role,
+      // 后台权限档位带进会话，供前端渲染菜单（服务端校验仍以数据库实时值为准）
+      staffRole: user.staffRole ?? 'owner',
       inviteCode: user.inviteCode,
     };
     const token = createSessionToken(sessionUser);

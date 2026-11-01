@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { getSession, requireAdmin, HttpError } from '@/lib/auth';
+import { getSession, HttpError } from '@/lib/auth';
 import { isoUtcSql } from '@/lib/chat-time';
 import { requireStaff, unreadByStaff } from '@/lib/chat-staff';
 import { visitorDisplayName } from '@/lib/chat-visitor';
@@ -34,6 +34,9 @@ export async function GET() {
       lastContent: string | null;
       lastImageUrl: string | null;
       lastSender: string | null;
+      orderNo: string | null;
+      orderTotal: number | null;
+      orderStatus: string | null;
     }[]
   >`
     SELECT c."id",
@@ -49,9 +52,13 @@ export async function GET() {
            lm."content"   AS "lastContent",
            lm."imageUrl"  AS "lastImageUrl",
            lm."productSlug" AS "lastProductSlug",
-           lm."sender"    AS "lastSender"
+           lm."sender"    AS "lastSender",
+           o."orderNo"  AS "orderNo",
+           o."total"    AS "orderTotal",
+           o."status"   AS "orderStatus"
     FROM "ChatConversation" c
     LEFT JOIN "User" u ON u."id" = c."userId"
+    LEFT JOIN "Order" o ON o."id" = c."orderId"
     LEFT JOIN LATERAL (
       SELECT m."content", m."imageUrl", m."productSlug", m."sender"
       FROM "ChatMessage" m
@@ -79,6 +86,14 @@ export async function GET() {
       c.lastContent ||
       (c.lastImageUrl ? '[image]' : c.lastProductSlug ? '[商品]' : ''),
     lastSender: c.lastSender || null,
+    // 关联订单（客户从订单页发起咨询时带上）
+    order: c.orderNo
+      ? {
+          orderNo: c.orderNo,
+          total: c.orderTotal,
+          status: c.orderStatus,
+        }
+      : null,
     user:
       c.userName || c.userUsername || c.userEmail
         ? { name: c.userName, username: c.userUsername, email: c.userEmail }
@@ -113,6 +128,18 @@ export async function POST(req: NextRequest) {
   const locale = ['ko', 'zh', 'en'].includes(body.locale) ? body.locale : 'ko';
   const guestToken = crypto.randomBytes(18).toString('hex');
 
+  // 关联订单（客户从订单页发起咨询时带上）。
+  // ⚠️ 必须校验订单归属：只能关联「自己的」订单，否则可枚举他人订单号。
+  let orderId: string | null = null;
+  const rawOrderNo = String(body.orderNo ?? '').trim().slice(0, 40);
+  if (rawOrderNo) {
+    const ord = await prisma.order.findFirst({
+      where: { orderNo: rawOrderNo, userId: session.id },
+      select: { id: true },
+    });
+    if (ord) orderId = ord.id;
+  }
+
   const conv = await prisma.chatConversation.create({
     data: {
       visitorName,
@@ -121,6 +148,7 @@ export async function POST(req: NextRequest) {
       locale,
       guestToken,
       userId: session.id,
+      orderId,
     },
   });
 

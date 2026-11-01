@@ -7,6 +7,7 @@ import { getOrderByNo } from '@/lib/services/order-service';
 import { formatPrice } from '@/lib/format';
 import { statusLabel } from '@/lib/order-labels';
 import { OrderActions } from '@/components/order/order-actions';
+import { AskAboutOrder } from '@/components/order/ask-about-order';
 
 /** 正常流转的时间线节点（cancelled / refunded 不走时间线，显示红条） */
 const TIMELINE = ['pending', 'paid', 'fulfilled', 'shipped', 'completed'] as const;
@@ -107,6 +108,11 @@ export default async function OrderDetailPage({
       ) : null}
 
       <OrderActions orderNo={order.orderNo} status={order.status} />
+
+      {/* 就这单咨询客服 —— 把订单号带进站内客服对话（客服侧能直接看到订单号/金额/状态） */}
+      <div className="mt-4">
+        <AskAboutOrder orderNo={order.orderNo} />
+      </div>
 
       {/* 商品清单 */}
       <div className="border border-line mt-6">
